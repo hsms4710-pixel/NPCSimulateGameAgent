@@ -6,26 +6,7 @@
 
 from typing import Dict, Any, Optional, List
 from datetime import datetime
-
-# 从主系统导入NPCAction，确保一致性
-try:
-    from npc_system import NPCAction
-except ImportError:
-    # 如果无法导入，定义本地枚举（备用）
-    from enum import Enum
-    class NPCAction(Enum):
-        WORK = "工作"
-        REST = "休息"
-        SLEEP = "睡觉"
-        EAT = "吃饭"
-        SOCIALIZE = "社交"
-        OBSERVE = "观察"
-        HELP_OTHERS = "帮助他人"
-        THINK = "思考"
-        PRAY = "祈祷"
-        LEARN = "学习"
-        CREATE = "创造"
-        TRAVEL = "移动"
+from constants import NPCAction
 
 
 class BehaviorDecisionTree:
@@ -110,6 +91,15 @@ class BehaviorDecisionTree:
         Returns:
             NPCAction 或 None（None表示需要LLM决策）
         """
+        # *** 生存锁定逻辑（最高优先级）***
+        # 当能量过低且疲劳过高时，强制睡眠，不被任何LLM决策覆盖
+        if energy_level < 10 and needs.get("fatigue", 0) > 0.9:
+            return NPCAction.SLEEP  # 生物本能：强制睡眠，不可中断
+        
+        # 如果饥饿度极高，可能导致意外（如昏迷），需优先进食
+        if needs.get("hunger", 0) > 0.95:
+            return NPCAction.EAT  # 紧急进食，防止因饥饿失能
+        
         # 1. 检查是否有紧急任务（优先级>=90），需要LLM决策
         if current_task and current_task.get("priority", 0) >= 90:
             return None  # 紧急任务需要LLM决策
