@@ -48,6 +48,16 @@ class NPCSimulatorGUI:
 
         # 活动日志
         self.activity_log: List[str] = []
+        
+        # Token 统计信息
+        self.token_stats = {
+            "total_tokens_sent": 0,
+            "total_tokens_received": 0,
+            "total_api_calls": 0,
+            "session_start_time": datetime.now(),
+            "compression_ratio": 1.0,
+            "estimated_cost": 0.0
+        }
 
         # 初始化界面
         self.initialize_simulation()
@@ -85,6 +95,9 @@ class NPCSimulatorGUI:
         self.create_event_panel(right_panel)
         self.create_react_thinking_panel(right_panel)  # 新增：React思考过程面板
         self.create_dialogue_panel(right_panel)
+        
+        # 底部：Token 消耗统计面板
+        self.create_token_stats_panel(main_frame)
 
     def create_control_panel(self, parent):
         """创建控制面板"""
@@ -1305,6 +1318,121 @@ class NPCSimulatorGUI:
                 self.autonomous_status_label.config(text="运行中", foreground="green")
             else:
                 self.autonomous_status_label.config(text="未启动", foreground="red")
+
+    def create_token_stats_panel(self, parent):
+        """创建 Token 消耗统计面板"""
+        stats_frame = ttk.LabelFrame(parent, text="📊 Token 消耗统计", padding=10)
+        stats_frame.pack(fill=tk.X, pady=(10, 0))
+
+        # 统计信息框架（使用网格布局）
+        info_frame = ttk.Frame(stats_frame)
+        info_frame.pack(fill=tk.X, pady=(0, 5))
+
+        # Token 发送
+        ttk.Label(info_frame, text="Tokens 发送:", font=("Arial", 9, "bold")).grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+        self.tokens_sent_label = ttk.Label(info_frame, text="0", foreground="blue", font=("Arial", 10, "bold"))
+        self.tokens_sent_label.grid(row=0, column=1, sticky=tk.W, padx=(0, 30))
+
+        # Token 接收
+        ttk.Label(info_frame, text="Tokens 接收:", font=("Arial", 9, "bold")).grid(row=0, column=2, sticky=tk.W, padx=(0, 10))
+        self.tokens_received_label = ttk.Label(info_frame, text="0", foreground="green", font=("Arial", 10, "bold"))
+        self.tokens_received_label.grid(row=0, column=3, sticky=tk.W, padx=(0, 30))
+
+        # API 调用次数
+        ttk.Label(info_frame, text="API 调用:", font=("Arial", 9, "bold")).grid(row=0, column=4, sticky=tk.W, padx=(0, 10))
+        self.api_calls_label = ttk.Label(info_frame, text="0", foreground="purple", font=("Arial", 10, "bold"))
+        self.api_calls_label.grid(row=0, column=5, sticky=tk.W)
+
+        # 第二行信息
+        info_frame2 = ttk.Frame(stats_frame)
+        info_frame2.pack(fill=tk.X, pady=(5, 5))
+
+        # 总 Token 数
+        ttk.Label(info_frame2, text="总 Tokens:", font=("Arial", 9, "bold")).grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+        self.total_tokens_label = ttk.Label(info_frame2, text="0", foreground="darkblue", font=("Arial", 10, "bold"))
+        self.total_tokens_label.grid(row=0, column=1, sticky=tk.W, padx=(0, 30))
+
+        # 压缩比率
+        ttk.Label(info_frame2, text="压缩比率:", font=("Arial", 9, "bold")).grid(row=0, column=2, sticky=tk.W, padx=(0, 10))
+        self.compression_ratio_label = ttk.Label(info_frame2, text="1.00x", foreground="orange", font=("Arial", 10, "bold"))
+        self.compression_ratio_label.grid(row=0, column=3, sticky=tk.W, padx=(0, 30))
+
+        # 估计成本 (假设 $0.001 per 1K tokens)
+        ttk.Label(info_frame2, text="估计成本:", font=("Arial", 9, "bold")).grid(row=0, column=4, sticky=tk.W, padx=(0, 10))
+        self.estimated_cost_label = ttk.Label(info_frame2, text="$0.00", foreground="red", font=("Arial", 10, "bold"))
+        self.estimated_cost_label.grid(row=0, column=5, sticky=tk.W)
+
+        # 运行时间
+        info_frame3 = ttk.Frame(stats_frame)
+        info_frame3.pack(fill=tk.X)
+
+        ttk.Label(info_frame3, text="运行时间:", font=("Arial", 9, "bold")).grid(row=0, column=0, sticky=tk.W, padx=(0, 10))
+        self.runtime_label = ttk.Label(info_frame3, text="00:00:00", font=("Arial", 10))
+        self.runtime_label.grid(row=0, column=1, sticky=tk.W, padx=(0, 30))
+
+        # 清除统计按钮
+        ttk.Button(info_frame3, text="清除统计", command=self.reset_token_stats).grid(row=0, column=2, sticky=tk.E)
+        ttk.Button(info_frame3, text="导出数据", command=self.export_token_stats).grid(row=0, column=3, sticky=tk.E, padx=(5, 0))
+
+    def update_token_stats(self, tokens_sent: int = 0, tokens_received: int = 0, api_call: bool = False):
+        """更新 Token 统计"""
+        self.token_stats["total_tokens_sent"] += tokens_sent
+        self.token_stats["total_tokens_received"] += tokens_received
+        if api_call:
+            self.token_stats["total_api_calls"] += 1
+
+        # 计算成本（DeepSeek 成本：约 $0.0005 per 1K input tokens, $0.0015 per 1K output tokens）
+        # 简化为平均 $0.001 per 1K tokens
+        total_tokens = self.token_stats["total_tokens_sent"] + self.token_stats["total_tokens_received"]
+        self.token_stats["estimated_cost"] = total_tokens / 1000000.0  # 简化成本
+
+        # 更新 UI
+        self.tokens_sent_label.config(text=f"{self.token_stats['total_tokens_sent']:,}")
+        self.tokens_received_label.config(text=f"{self.token_stats['total_tokens_received']:,}")
+        self.api_calls_label.config(text=f"{self.token_stats['total_api_calls']}")
+        self.total_tokens_label.config(text=f"{total_tokens:,}")
+        self.compression_ratio_label.config(text=f"{self.token_stats['compression_ratio']:.2f}x")
+        self.estimated_cost_label.config(text=f"${self.token_stats['estimated_cost']:.4f}")
+
+        # 更新运行时间
+        elapsed = datetime.now() - self.token_stats["session_start_time"]
+        hours, remainder = divmod(int(elapsed.total_seconds()), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        self.runtime_label.config(text=f"{hours:02d}:{minutes:02d}:{seconds:02d}")
+
+    def reset_token_stats(self):
+        """重置 Token 统计"""
+        self.token_stats = {
+            "total_tokens_sent": 0,
+            "total_tokens_received": 0,
+            "total_api_calls": 0,
+            "session_start_time": datetime.now(),
+            "compression_ratio": 1.0,
+            "estimated_cost": 0.0
+        }
+        self.tokens_sent_label.config(text="0")
+        self.tokens_received_label.config(text="0")
+        self.api_calls_label.config(text="0")
+        self.total_tokens_label.config(text="0")
+        self.estimated_cost_label.config(text="$0.00")
+
+    def export_token_stats(self):
+        """导出 Token 统计数据"""
+        stats_data = {
+            "timestamp": datetime.now().isoformat(),
+            "total_tokens_sent": self.token_stats["total_tokens_sent"],
+            "total_tokens_received": self.token_stats["total_tokens_received"],
+            "total_api_calls": self.token_stats["total_api_calls"],
+            "estimated_cost": self.token_stats["estimated_cost"],
+            "compression_ratio": self.token_stats["compression_ratio"],
+            "runtime": str(datetime.now() - self.token_stats["session_start_time"])
+        }
+        
+        # 写入日志文件
+        with open("token_stats.json", "w", encoding="utf-8") as f:
+            json.dump(stats_data, f, ensure_ascii=False, indent=2)
+        
+        messagebox.showinfo("导出成功", f"Token 统计数据已导出到 token_stats.json\n\n总消耗: {stats_data['total_api_calls']} 次 API 调用\n估计成本: ${stats_data['estimated_cost']:.4f}")
 
     def on_closing(self):
         """窗口关闭处理"""
