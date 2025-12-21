@@ -12,7 +12,6 @@ from deepseek_client import DeepSeekClient
 from npc_system import NPCBehaviorSystem, NPCAction, Emotion
 from world_lore import NPC_TEMPLATES, ENVIRONMENTAL_EVENTS
 from world_clock import get_world_clock
-from react_agent import ReasoningMode
 
 logger = logging.getLogger(__name__)
 
