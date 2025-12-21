@@ -270,8 +270,11 @@ class NPCToolRegistry:
         - 如果行为决策树已经决定切换活动（日常行为），此工具不应该覆盖
         - 此工具主要用于复杂情况下的LLM决策，或紧急任务需要
         - 工具调用前会检查当前是否有高优先级任务，如果有则允许切换
+        - 睡眠时只能被优先级 >= 95 的任务唤醒（生死关头）
         """
         from npc_system import NPCAction
+        from constants import ACTIVITY_PRIORITY_SLEEP, ACTIVITY_PRIORITY_CRITICAL
+        
         activity_map = {
             "工作": NPCAction.WORK,
             "休息": NPCAction.REST,
@@ -287,6 +290,19 @@ class NPCToolRegistry:
         }
         
         if activity in activity_map:
+            # 特殊保护：睡眠状态只能被生死关头的任务唤醒
+            if self.npc_system.current_activity == NPCAction.SLEEP:
+                current_task = self.npc_system.persistence.current_task
+                if activity != "睡觉":  # 尝试唤醒
+                    if not current_task or current_task.priority < ACTIVITY_PRIORITY_CRITICAL:
+                        # 不是生死关头，不能唤醒睡眠中的NPC
+                        return {
+                            "activity": activity,
+                            "reason": reason,
+                            "note": "NPC正在深度睡眠，无法被中等优先级任务唤醒",
+                            "blocked": True
+                        }
+            
             # 检查是否有高优先级任务，如果有则允许切换
             current_task = self.npc_system.persistence.current_task
             if current_task and current_task.priority >= 80:

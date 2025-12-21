@@ -778,7 +778,6 @@ class NPCBehaviorSystem:
             )
 
     def process_event(self, event_content: str, event_type: str,
-                     reasoning_mode: ReasoningMode = ReasoningMode.NORMAL,
                      max_reasoning_steps: Optional[int] = None) -> Dict[str, Any]:
         """
         处理事件的统一入口 - 使用React Agent推理
@@ -1047,22 +1046,44 @@ class NPCBehaviorSystem:
                     self.activity_start_time = current_time
 
     def _update_task_progress(self, time_diff: float):
-        """更新任务进度 - 使用LLM智能决策"""
+        """
+        更新任务进度 - 优化版本（基于时间流逝而非每次LLM调用）
+        策略：在创建任务时由LLM预估总时长，日常更新基于比例，只在突发事件时重新评估
+        """
         task = self.persistence.current_task
         if not task or task.status != "active":
             return
 
-        # 使用LLM来决定任务进度更新
-        progress_update = self._llm_decide_task_progress(task, time_diff)
-        
-        if progress_update > 0:
-            old_progress = task.progress
-            task.progress = min(1.0, task.progress + progress_update)
+        # 如果任务未设置预估时长，首次调用LLM获取预估值
+        if not hasattr(task, 'estimated_total_hours') or task.estimated_total_hours is None:
+            task.estimated_total_hours = self._llm_estimate_task_duration(task)
             self.persistence._save_data()
-            
-            # 如果进度有明显变化，打印日志
-            if task.progress - old_progress > 0.01:
-                print(f"[LLM决策] 任务进度: {task.description[:30]}... {old_progress*100:.1f}% -> {task.progress*100:.1f}% (+{progress_update*100:.1f}%)")
+
+        # 基于时间流逝计算进度增量（而非LLM每次决策）
+        if task.estimated_total_hours > 0:
+            progress_increment = time_diff / task.estimated_total_hours
+        else:
+            progress_increment = 0.05  # 默认进度增量
+
+        # 只在进度有明显变化或达到阈值时更新
+        old_progress = task.progress
+        task.progress = min(1.0, task.progress + progress_increment)
+        
+        # 每达到 20% 的进度或任务完成时，重新用 LLM 评估（动态调整）
+        should_recheck = (int(old_progress * 5) != int(task.progress * 5)) or task.progress >= 1.0
+        
+        if should_recheck and task.progress < 1.0:
+            # 重新评估：任务是否应该加速或减速完成
+            dynamic_adjustment = self._llm_recheck_task_progress(task, time_diff)
+            if dynamic_adjustment != 0:
+                task.progress += dynamic_adjustment
+                print(f"[LLM动态调整] 任务: {task.description[:30]}... 调整: {dynamic_adjustment*100:.1f}%")
+
+        task.progress = min(1.0, task.progress)  # 确保不超过 100%
+        self.persistence._save_data()
+
+        if task.progress - old_progress > 0.01:
+            print(f"[任务进度] {task.description[:30]}... {old_progress*100:.1f}% -> {task.progress*100:.1f}%")
 
         # 如果任务完成
         if task.progress >= 1.0:
@@ -1075,150 +1096,95 @@ class NPCBehaviorSystem:
             # 检查是否有后续影响
             self._handle_task_completion(task)
 
-    def _llm_decide_task_progress(self, task, time_diff: float) -> float:
+    def _llm_estimate_task_duration(self, task) -> float:
         """
-        使用LLM智能决策任务进度更新（使用优化的上下文压缩）
+        使用LLM预估任务的总时长（仅在创建任务时调用一次）
         
         Args:
-            task: 当前任务
+            task: 任务对象
+            
+        Returns:
+            预估小时数
+        """
+        try:
+            prompt = f"""
+你是一个 NPC 行为预测专家。请预估以下任务的完成时长（单位：小时）：
+
+任务: {task.description}
+优先级: {task.priority}
+任务类型: {task.task_type}
+NPC 工作: {self.config['profession']}
+NPC 名字: {self.config['name']}
+
+只返回一个数字（小时数），不要其他说明。
+如果是短期任务（如制作物品），通常 0.5-4 小时。
+如果是中期目标（如学习技能），通常 4-24 小时。
+如果是长期目标，通常 24+ 小时。
+
+预估时长（小时）："""
+            
+            response = self.deepseek_client.chat(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=50
+            )
+            
+            try:
+                # 提取数字
+                duration_str = response['choices'][0]['message']['content'].strip()
+                estimated_hours = float(''.join(filter(lambda x: x.isdigit() or x == '.', duration_str)))
+                return max(0.5, min(720, estimated_hours))  # 限制在 0.5-720 小时
+            except:
+                return 4.0  # 默认 4 小时
+                
+        except Exception as e:
+            print(f"LLM 预估任务时长失败: {e}")
+            return 4.0  # 默认降级为 4 小时
+
+    def _llm_recheck_task_progress(self, task, time_diff: float) -> float:
+        """
+        动态重新评估任务进度（仅在每 20% 进度时调用）
+        检查任务是否应该加速或减速完成
+        
+        Args:
+            task: 任务对象
             time_diff: 时间差（小时）
             
         Returns:
-            进度增量 (0.0-1.0)
+            进度调整增量 (-0.2 to 0.2)
         """
         try:
-            # 构建压缩上下文
-            npc_state = {
-                "current_activity": self.current_activity.value if self.current_activity else "空闲",
-                "current_emotion": self.current_emotion.value,
-                "energy_level": self.energy_level,
-                "time": self.world_clock.current_time.strftime("%H:%M"),
-                "location": self.current_location,
-                "needs": {
-                    "hunger": self.need_system.needs.hunger,
-                    "fatigue": self.need_system.needs.fatigue,
-                    "social": self.need_system.needs.social
-                }
-            }
-            
-            current_task_dict = {
-                "description": task.description,
-                "priority": task.priority,
-                "progress": task.progress,
-                "task_type": task.task_type
-            }
-            
-            # 获取最近事件（最多3个）
-            recent_events = []
-            if hasattr(self.persistence, 'event_history'):
-                recent_events = [
-                    {
-                        "event_type": e.event_type,
-                        "content": e.content,
-                        "impact_score": e.impact_score
-                    }
-                    for e in self.persistence.event_history[-3:]
-                ]
-            
-            # 获取相关记忆（使用记忆管理器）
-            relevant_memories = None
-            if hasattr(self, 'memories') and self.memories:
-                # 将记忆转换为字典格式
-                memories_dict = [
-                    {
-                        "content": m.content,
-                        "importance": m.importance,
-                        "tags": m.tags if hasattr(m, 'tags') else [],
-                        "timestamp": m.timestamp.isoformat() if isinstance(m.timestamp, datetime) else str(m.timestamp)
-                    }
-                    for m in self.memories[-20:]  # 最近20个记忆
-                ]
-            # 使用RAG系统搜索相关记忆（优先使用RAG）
-            try:
-                relevant_memories_rag = self.rag_memory.search_with_context(
-                    query=task.description,
-                    current_task=current_task_dict,
-                    time_context={"hour": self.world_clock.current_time.hour},
-                    top_k=5
-                )
-                relevant_memories = relevant_memories_rag
-            except Exception as e:
-                print(f"RAG搜索失败: {e}, 使用备用搜索")
-                # 备用：使用记忆管理器搜索
-                relevant_memories = self.memory_manager.get_relevant_memories(
-                    query=task.description,
-                    memories=memories_dict,
-                    top_k=5
-                )
-            
-            # 压缩上下文
-            compressed_context = self.context_compressor.compress_context(
-                npc_config=self.config,
-                npc_state=npc_state,
-                current_task=current_task_dict,
-                recent_events=recent_events,
-                relevant_memories=relevant_memories
-            )
-            
-            # 使用优化的prompt模板
-            prompt = self.prompt_templates.get_task_progress_prompt(
-                compressed_context=compressed_context,
-                task_description=task.description,
-                time_passed=time_diff
-            )
+            # 简化的 prompt，只检查是否需要加速或减速
+            prompt = f"""
+任务进度检查：{task.description}
+当前进度：{task.progress*100:.0f}%
+预估总时长：{task.estimated_total_hours:.1f} 小时
+当前情感状态：{self.current_emotion.value}
+当前能量：{self.energy_level*100:.0f}%
 
-            response = self.llm_client.generate_response(
-                prompt,
-                temperature=0.7,
-                max_tokens=300
-            )
-
-            # 解析LLM响应
-            import json
-            import re
+请判断任务是否需要加速（+）、正常（0）或减速（-）？
+只返回一个符号：+ 或 0 或 - （加速、正常或减速）"""
             
-            # 尝试提取JSON
-            json_match = re.search(r'\{[^{}]*"progress_increase"[^{}]*\}', response, re.DOTALL)
-            if json_match:
-                result = json.loads(json_match.group())
-                progress_increase = float(result.get('progress_increase', 0.0))
-                reasoning = result.get('reasoning', '')
-                
-                # 限制进度增量在合理范围内
-                progress_increase = max(0.0, min(0.3, progress_increase))
-                
-                # 根据时间差调整，但考虑任务类型和复杂度
-                # 简单任务（如检查）应该快速完成，复杂任务需要更长时间
-                task_complexity = self._estimate_task_complexity(task.description)
-                time_multiplier = self._calculate_time_multiplier(task_complexity, time_diff)
-                progress_increase = progress_increase * time_multiplier
-                
-                if reasoning:
-                    print(f"[LLM推理] {reasoning[:50]}...")
-                
-                return progress_increase
+            response = self.deepseek_client.chat(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=10
+            )
+            
+            decision = response['choices'][0]['message']['content'].strip()[0]  # 取第一个字符
+            
+            if decision == '+':
+                return 0.1  # 加速 10% 进度
+            elif decision == '-':
+                return -0.05  # 减速 5% 进度
             else:
-                # 如果无法解析JSON，使用简单的启发式规则
-                return self._fallback_progress_update(task, time_diff)
+                return 0  # 正常，无调整
                 
         except Exception as e:
-            print(f"[LLM决策错误] {e}, 使用备用规则")
-            return self._fallback_progress_update(task, time_diff)
-
-    def _fallback_progress_update(self, task, time_diff: float) -> float:
-        """备用进度更新规则（当LLM失败时使用）"""
-        if task.task_type == "event_response":
-            # 根据当前活动决定
-            if self.current_activity == NPCAction.OBSERVE:
-                return min(0.15, time_diff * 0.3)  # 观察活动每小时30%
-            elif self.current_activity == NPCAction.HELP_OTHERS:
-                return min(0.20, time_diff * 0.4)  # 帮助活动每小时40%
-            elif self.current_activity == NPCAction.WORK:
-                return min(0.10, time_diff * 0.2)  # 工作活动每小时20%
-            else:
-                return min(0.05, time_diff * 0.1)  # 其他活动每小时10%
-        else:
-            return min(0.10, time_diff * 0.2)  # 默认每小时20%
+            print(f"[LLM 动态评估失败] {e}，保持正常进度")
+            return 0  # 失败时不调整
 
     def _handle_task_completion(self, completed_task: NPCTask):
         """处理任务完成的影响 - 使用LLM智能决策后续任务"""

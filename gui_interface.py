@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 import json
 import logging
+import os
+from dotenv import load_dotenv
 
 from deepseek_client import DeepSeekClient
 from npc_system import NPCBehaviorSystem, NPCAction, Emotion
@@ -14,6 +16,9 @@ from world_lore import NPC_TEMPLATES, ENVIRONMENTAL_EVENTS
 from world_clock import get_world_clock
 
 logger = logging.getLogger(__name__)
+
+# 加载环境变量
+load_dotenv()
 
 class NPCSimulatorGUI:
     """基于Tkinter的NPC模拟器GUI"""
@@ -24,8 +29,11 @@ class NPCSimulatorGUI:
         self.root.geometry("1200x800")
         self.root.configure(bg='#f0f0f0')
 
-        # 初始化DeepSeek客户端
-        self.deepseek_client = DeepSeekClient("sk-your_deepseek_api_key_here")
+        # 初始化DeepSeek客户端（从环境变量读取API key）
+        api_key = os.getenv('DEEPSEEK_API_KEY')
+        if not api_key:
+            raise ValueError("DEEPSEEK_API_KEY 环境变量未设置，请检查 .env 文件")
+        self.deepseek_client = DeepSeekClient(api_key)
 
         # NPC实例
         self.npc_system: Optional[NPCBehaviorSystem] = None
