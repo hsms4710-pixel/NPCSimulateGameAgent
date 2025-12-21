@@ -1,0 +1,19 @@
+# Core dependencies for NPC simulation
+requests==2.31.0  # For DeepSeek API calls
+
+# GUI dependencies (tkinter is included with Python standard library)
+
+# Data handling and utilities
+python-dotenv==1.0.0  # For environment variables
+
+# Enhanced logging and console output
+rich==13.7.0
+loguru==0.7.2
+
+# Testing (optional)
+pytest==7.4.3
+
+# Code quality tools (optional)
+black==23.11.0
+isort==5.12.0
+mypy==1.7.1
