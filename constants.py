@@ -102,3 +102,18 @@ ENERGY_CRITICAL_THRESHOLD = 0.2    # 能量紧急值（20%）
 HUNGER_CRITICAL_THRESHOLD = 0.9    # 饥饿紧急值（90%）
 FATIGUE_CRITICAL_THRESHOLD = 0.95  # 疲劳紧急值（95%）
 SLEEP_FORCED_THRESHOLD = 0.98      # 强制睡眠阈值（98%）
+# L1 决策层 - 活动惯性值（0-100，越高越难被打断）
+ACTIVITY_INERTIA = {
+    NPCAction.SLEEP: 95,       # 睡眠最难被打断
+    NPCAction.EAT: 85,         # 吃饭生存性强，不易被打断
+    NPCAction.WORK: 65,        # 工作相对专注
+    NPCAction.REST: 50,        # 休息容易被打扰
+    NPCAction.SOCIALIZE: 30,   # 社交最容易被打扰
+    NPCAction.TRAVEL: 45,      # 移动中等
+    NPCAction.THINK: 35,       # 思考中等
+    NPCAction.PRAY: 70,        # 祈祷较难被打扰
+    NPCAction.LEARN: 55,       # 学习中等专注
+    NPCAction.CREATE: 65,      # 创造相对专注
+    NPCAction.OBSERVE: 40,     # 观察中等
+    NPCAction.HELP_OTHERS: 60  # 帮助他人中等
+}

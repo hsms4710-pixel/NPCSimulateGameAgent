@@ -10,6 +10,46 @@ from .memory_manager import MemoryManager, MemorySummarizer, Episode, Compressed
 from .react_tools import NPCToolRegistry, ReActAgent, NPCActionTool
 from .rag_memory import RAGMemorySystem, SimpleVectorStore
 
+# 新增的高级功能模块
+from .memory_layers import (
+    MemoryLayerManager,
+    HotMemory,
+    WarmMemory,
+    ColdMemory,
+    NPCEventEnhanced,
+    Insight,
+    Episode as MemoryEpisode
+)
+from .four_level_decisions import (
+    FourLevelDecisionMaker,
+    L1RoutineDecision,
+    L2FastFilter,
+    L3StrategyPlanning,
+    L4ToTReactReasoning,
+    DecisionLevel
+)
+from .persona_world_integration import (
+    PersonaCard,
+    WorldCardView,
+    PersonaWorldIntegrator,
+    PersonalCharacterMigrationTask,
+    DynamicPersonaUpdateManager
+)
+from .world_event_manager import (
+    WorldEventManager,
+    SpatialMessage,
+    GossipMessage,
+    NPCToolRegistry_SocialExtension,
+    MessageType
+)
+from .reflection_flow import (
+    ReflectionFlowManager,
+    ReflectionEngine,
+    ReflectionTask,
+    ReflectionResult,
+    ReflectionType
+)
+
 __all__ = [
     'ContextCompressor',
     'BehaviorDecisionTree',
@@ -22,5 +62,38 @@ __all__ = [
     'ReActAgent',
     'NPCActionTool',
     'RAGMemorySystem',
-    'SimpleVectorStore'
+    'SimpleVectorStore',
+    # 分层记忆
+    'MemoryLayerManager',
+    'HotMemory',
+    'WarmMemory',
+    'ColdMemory',
+    'NPCEventEnhanced',
+    'Insight',
+    'MemoryEpisode',
+    # 四级决策
+    'FourLevelDecisionMaker',
+    'L1RoutineDecision',
+    'L2FastFilter',
+    'L3StrategyPlanning',
+    'L4ToTReactReasoning',
+    'DecisionLevel',
+    # 人物卡与世界卡
+    'PersonaCard',
+    'WorldCardView',
+    'PersonaWorldIntegrator',
+    'PersonalCharacterMigrationTask',
+    'DynamicPersonaUpdateManager',
+    # 世界事件系统
+    'WorldEventManager',
+    'SpatialMessage',
+    'GossipMessage',
+    'NPCToolRegistry_SocialExtension',
+    'MessageType',
+    # 反思流程
+    'ReflectionFlowManager',
+    'ReflectionEngine',
+    'ReflectionTask',
+    'ReflectionResult',
+    'ReflectionType'
 ]

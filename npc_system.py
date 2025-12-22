@@ -2,12 +2,15 @@ import json
 import time
 import random
 import threading
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from enum import Enum
 from dataclasses import dataclass, field
 from deepseek_client import DeepSeekClient
 from world_lore import NPC_TEMPLATES, ENVIRONMENTAL_EVENTS
+
+logger = logging.getLogger(__name__)
 from npc_persistence import NPCPersistence, NPCEvent, NPCTask
 from world_clock import get_world_clock
 from constants import NPCAction, ReasoningMode, Emotion  # 从统一的常量文件导入
@@ -16,7 +19,8 @@ from npc_optimization import (
     BehaviorDecisionTree,
     PromptTemplates,
     MemoryManager,
-    RAGMemorySystem
+    RAGMemorySystem,
+    FourLevelDecisionMaker
 )
 from npc_optimization.react_tools import NPCToolRegistry, ReActAgent
 
@@ -220,6 +224,13 @@ class NPCBehaviorSystem:
         self.rag_memory = RAGMemorySystem()
         self.tool_registry = NPCToolRegistry(self)
         self.react_agent = ReActAgent(deepseek_client, self.tool_registry)
+        
+        # 初始化四级决策系统（新的核心决策引擎）
+        self.decision_maker = FourLevelDecisionMaker(
+            npc_config=npc_config,
+            llm_client=deepseek_client,
+            tool_registry=self.tool_registry
+        )
         
         # 初始化RAG记忆系统（从现有记忆加载）
         self._initialize_rag_memory()
@@ -712,54 +723,285 @@ class NPCBehaviorSystem:
     def process_event(self, event_content: str, event_type: str,
                      max_reasoning_steps: Optional[int] = None) -> Dict[str, Any]:
         """
-        处理事件的统一入口 - 使用React Agent推理
-        这是新的核心事件处理方法，替代旧的硬编码逻辑
+        处理事件的统一入口 - 使用四级决策系统
+        
+        决策流程：
+        L1: 生物钟硬判决 (0 tokens) - 是否遵循日程
+        L2: 快速重要性过滤 (50 tokens) - 是否忽视这个事件
+        L3: 战略规划 (200 tokens) - 制定行动计划
+        L4: 深度推理 (500+ tokens) - 复杂情况下的树搜索推理
 
         Args:
             event_content: 事件内容
             event_type: 事件类型
-            reasoning_mode: 推理模式
-            max_reasoning_steps: 最大推理步数
+            max_reasoning_steps: 最大推理步数（仅用于L4）
         """
-        # 1. 使用React Agent分析事件影响
-        current_state = {
-            'current_task': self.current_activity.value if self.current_activity else '无',
-            'emotion': self.current_emotion.value,
-            'energy': self.energy_level,
-            'time': self.world_clock.current_time.strftime("%H:%M"),
-            'location': self.current_location
+        # 0. 预处理：构建当前状态快照
+        current_state = self._build_current_state_snapshot()
+        
+        # 1. 评估事件冲击力（0-100）
+        impact_score = self._evaluate_event_impact(event_content, event_type)
+        
+        # 2. 构建事件对象
+        event = {
+            "content": event_content,
+            "type": event_type,
+            "impact_score": impact_score,
+            "timestamp": datetime.now().isoformat()
         }
-
-        # 使用新版 ReActAgent 分析事件影响
-        impact_analysis = {
-            'should_respond': True,  # 默认需要响应
-            'reasoning': f"事件类型: {event_type}，内容: {event_content[:50]}...",
-            'confidence': 0.8
-        }
-
-        # 2. 判断是否需要响应
-        should_respond = impact_analysis['should_respond']
-
-        response_data = {
-            'should_respond': should_respond,
-            'impact_analysis': impact_analysis,
-            'state_changed': False,
-            'new_task_created': False,
-            'response_text': '',
-            'reasoning': '',
-            'reasoning_chain': impact_analysis.get('reasoning_result', {}),
-            'reasoning_steps': impact_analysis.get('reasoning_steps', 0),
-            'confidence': impact_analysis.get('confidence', 0.0)
-        }
-
-        if should_respond:
-            # 3. 生成响应和状态变化
-            response_data.update(self._generate_event_response(event_content, event_type, impact_analysis))
-
-            # 4. 记录事件
-            self._record_event(event_content, event_type, impact_analysis, response_data)
-
+        
+        # 3. 使用四级决策系统做出决策
+        decision_result = self.decision_maker.make_decision(
+            event=event,
+            current_state=current_state,
+            latest_impact_score=impact_score
+        )
+        
+        # 4. 执行决策的行动
+        response_data = self._execute_decision(decision_result, event, current_state)
+        
+        # 5. 记录决策过程和结果
+        self._record_decision_and_event(event, decision_result, response_data)
+        
         return response_data
+
+    def _build_current_state_snapshot(self) -> Dict[str, Any]:
+        """构建当前NPC状态快照，供决策系统使用"""
+        current_hour = self.world_clock.current_time.hour
+        
+        return {
+            "current_action": self.current_activity,
+            "current_hour": current_hour,
+            "energy_level": self.energy_level,
+            "hunger_level": self.hunger_level,
+            "fatigue_level": self.fatigue_level,
+            "current_emotion": self.current_emotion.value,
+            "location": self.current_location,
+            "current_task": self.persistence.current_task.description if self.persistence.current_task else None,
+            "time_string": self.world_clock.current_time.strftime("%H:%M"),
+            "relationships": self._get_relevant_relationships(event_content=""),
+            "recent_memory": self._get_recent_memory_context()
+        }
+
+    def _evaluate_event_impact(self, event_content: str, event_type: str) -> int:
+        """
+        评估事件冲击力 (0-100)
+        
+        冲击力决定事件是否能打断当前活动（与ACTIVITY_INERTIA比较）
+        """
+        # 基础分值（基于事件类型）
+        base_scores = {
+            "dialogue": 20,        # 对话
+            "world_event": 40,     # 世界事件
+            "preset_event": 50,    # 预设事件
+            "status_change": 30,   # 状态变化
+            "social": 35,          # 社交
+            "danger": 80,          # 危险事件
+            "emergency": 100       # 紧急事件
+        }
+        
+        impact = base_scores.get(event_type, 30)
+        
+        # 根据内容关键词调整冲击力
+        keywords_high_impact = ["死亡", "受伤", "失火", "救助", "紧急", "危险", "攻击"]
+        keywords_low_impact = ["问好", "闲聊", "观察", "想"]
+        
+        content_lower = event_content.lower()
+        for keyword in keywords_high_impact:
+            if keyword in content_lower:
+                impact = min(100, impact + 20)
+        
+        for keyword in keywords_low_impact:
+            if keyword in content_lower:
+                impact = max(0, impact - 10)
+        
+        return impact
+
+    def _execute_decision(self, decision_result: Dict[str, Any], 
+                         event: Dict[str, Any], 
+                         current_state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        执行决策系统的输出
+        
+        如果推荐改变活动，则：
+        1. 更新当前活动
+        2. 生成合适的响应文本
+        3. 创建/更新任务（如需要）
+        """
+        recommended_action = decision_result.get("action")
+        decision_level = decision_result.get("decision_level")
+        reasoning = decision_result.get("reasoning", "")
+        confidence = decision_result.get("confidence", 0.5)
+        
+        response_data = {
+            "decision_level": decision_level.value if hasattr(decision_level, 'value') else str(decision_level),
+            "recommended_action": recommended_action.value if hasattr(recommended_action, 'value') else str(recommended_action),
+            "reasoning": reasoning,
+            "confidence": confidence,
+            "response_text": "",
+            "state_changed": False,
+            "new_task_created": False
+        }
+        
+        # 如果推荐的行动与当前行动不同，则改变活动
+        if recommended_action != current_state.get("current_action"):
+            try:
+                self._change_activity(recommended_action)
+                response_data["state_changed"] = True
+            except Exception as e:
+                logger.warning(f"改变活动失败: {e}")
+        
+        # 生成自然语言响应
+        response_text = self._generate_response_for_event(
+            event, 
+            recommended_action, 
+            decision_level,
+            reasoning
+        )
+        response_data["response_text"] = response_text
+        
+        # 如果是高优先级事件（影响度>70）且L3/L4决策，可能需要创建任务
+        if event.get("impact_score", 0) > 70 and decision_level.value >= 3:
+            task_created = self._potentially_create_task_for_event(event, reasoning)
+            response_data["new_task_created"] = task_created
+        
+        return response_data
+
+    def _generate_response_for_event(self, event: Dict[str, Any], 
+                                     action: NPCAction,
+                                     decision_level,
+                                     reasoning: str) -> str:
+        """
+        根据事件和决策生成NPC的自然语言响应
+        
+        这里可以用轻量级的规则或简单的LLM调用，避免过度消耗Token
+        """
+        action_responses = {
+            NPCAction.SLEEP: "我现在很累，需要休息一下...",
+            NPCAction.EAT: "我有点饿了，得去吃点东西。",
+            NPCAction.WORK: "我得继续我的工作。",
+            NPCAction.REST: "我需要休息一会儿。",
+            NPCAction.SOCIALIZE: "让我们聊一聊吧。",
+            NPCAction.OBSERVE: "让我看看发生了什么。",
+            NPCAction.THINK: "这需要我好好思考一下...",
+            NPCAction.PRAY: "我要去祈祷。",
+            NPCAction.LEARN: "这很有趣，我想了解更多。",
+            NPCAction.CREATE: "我想创造点什么。",
+            NPCAction.HELP_OTHERS: "我应该去帮忙。",
+            NPCAction.TRAVEL: "我需要移动到其他地方。"
+        }
+        
+        # 根据事件类型添加特定的回应
+        event_type_responses = {
+            "dialogue": f"（听到了）{event.get('content', '')}",
+            "world_event": "（注意到周围发生了什么变化）",
+            "danger": "（立即警觉起来！）",
+            "emergency": "（这是紧急情况！）"
+        }
+        
+        base_response = event_type_responses.get(
+            event.get("type", ""),
+            action_responses.get(action, "我在处理这个情况。")
+        )
+        
+        return base_response
+
+    def _potentially_create_task_for_event(self, event: Dict[str, Any], reasoning: str) -> bool:
+        """
+        在必要时为事件创建任务
+        
+        返回：是否成功创建了任务
+        """
+        # 仅为特定类型的高影响事件创建任务
+        should_create = event.get("type") in ["world_event", "preset_event", "emergency"]
+        
+        if should_create:
+            try:
+                task_id = self.persistence.create_task(
+                    description=f"处理事件: {event['content'][:50]}",
+                    task_type="event_response",
+                    priority=min(100, event.get("impact_score", 50) + 20)
+                )
+                
+                # 如果这是紧急任务，立即设为当前任务
+                if event.get("impact_score", 0) > 80:
+                    task = self.persistence.tasks.get(task_id)
+                    if task:
+                        self.persistence.set_current_task(task)
+                
+                return True
+            except Exception as e:
+                logger.warning(f"创建事件任务失败: {e}")
+        
+        return False
+
+    def _record_decision_and_event(self, event: Dict[str, Any], 
+                                   decision_result: Dict[str, Any],
+                                   response_data: Dict[str, Any]):
+        """
+        记录事件和决策过程到持久化存储
+        """
+        try:
+            # 记录到决策历史
+            self.decision_history.append({
+                'timestamp': datetime.now(),
+                'type': 'event_processing',
+                'event': event,
+                'decision_level': decision_result.get('decision_level'),
+                'recommended_action': decision_result.get('action'),
+                'confidence': decision_result.get('confidence'),
+                'response': response_data.get('response_text')
+            })
+            
+            # 限制历史长度
+            if len(self.decision_history) > 100:
+                self.decision_history = self.decision_history[-100:]
+            
+            # 保存到持久化存储（可选）
+            # self.persistence.record_event(event, decision_result)
+            
+        except Exception as e:
+            logger.warning(f"记录决策和事件失败: {e}")
+
+    def _get_relevant_relationships(self, event_content: str) -> List[str]:
+        """
+        获取与事件相关的关系信息
+        
+        返回：相关NPC名称列表
+        """
+        try:
+            if hasattr(self, 'relationships') and isinstance(self.relationships, dict):
+                # 简单实现：返回关系得分最高的几个NPC
+                sorted_rels = sorted(
+                    self.relationships.items(),
+                    key=lambda x: abs(x[1].affection),
+                    reverse=True
+                )
+                return [npc_name for npc_name, _ in sorted_rels[:3]]
+            return []
+        except Exception as e:
+            logger.warning(f"获取相关关系失败: {e}")
+            return []
+
+    def _get_recent_memory_context(self) -> str:
+        """
+        获取最近的记忆上下文
+        
+        返回：最近事件的简要总结
+        """
+        try:
+            if hasattr(self, 'memories') and self.memories:
+                # 获取最近3条记忆
+                recent = self.memories[-3:] if len(self.memories) > 3 else self.memories
+                context_parts = []
+                for mem in recent:
+                    if hasattr(mem, 'content'):
+                        context_parts.append(mem.content[:50])
+                return " | ".join(context_parts)
+            return "（暂无最近记忆）"
+        except Exception as e:
+            logger.warning(f"获取记忆上下文失败: {e}")
+            return "（记忆访问失败）"
 
     def _generate_event_response(self, event_content: str, event_type: str,
                                 impact_analysis: Dict[str, Any]) -> Dict[str, Any]:
@@ -977,7 +1219,44 @@ class NPCBehaviorSystem:
                     self.persistence.current_state.primary_state = "rest"
                     self.activity_start_time = current_time
 
-    def _update_task_progress(self, time_diff: float):
+# 替换原有 _update_task_progress 方法
+def _update_task_progress(self, time_diff_hours: float):
+    """
+    更新任务进度 - 修复版
+    策略：日常使用纯数学计算，仅在20%节点进行轻量级LLM校验
+    """
+    task = self.persistence.current_task
+    if not task or task.status != "active":
+        return
+
+    # 1. 首次预估设置（仅执行一次）
+    if not hasattr(task, 'estimated_total_hours') or task.estimated_total_hours is None:
+        # 给定一个基于优先级的默认初值，避免首次阻塞
+        base_hours = 2.0 if task.priority > 80 else 4.0
+        task.estimated_total_hours = base_hours
+        # 异步请求LLM精细预估（可选）
+
+    # 2. 纯数学步进 (30秒循环即 +0.008小时)
+    old_progress = task.progress
+    progress_increment = time_diff_hours / task.estimated_total_hours
+    task.progress = min(1.0, task.progress + progress_increment)
+    
+    # 3. 动态校验点：每达到20%进度时进行一次轻量级逻辑检查
+    milestone_met = (int(old_progress * 5) != int(task.progress * 5))
+    if milestone_met and task.progress < 1.0:
+        # 此处可根据需要决定是否调用 _llm_recheck_task_progress
+        pass
+
+    # 4. 只有在进度发生 1% 以上的变化时才保存，减少I/O
+    if task.progress - old_progress > 0.01 or task.progress >= 1.0:
+        self.persistence._save_data()
+
+    if task.progress >= 1.0:
+        task.status = "completed"
+        self._handle_task_completion(task)
+
+       
+'''    def _update_task_progress(self, time_diff: float):
         """
         更新任务进度 - 优化版本（基于时间流逝而非每次LLM调用）
         策略：在创建任务时由LLM预估总时长，日常更新基于比例，只在突发事件时重新评估
@@ -1027,6 +1306,8 @@ class NPCBehaviorSystem:
 
             # 检查是否有后续影响
             self._handle_task_completion(task)
+'''
+
 
     def _llm_estimate_task_duration(self, task) -> float:
         """
