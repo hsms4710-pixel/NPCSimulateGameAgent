@@ -1255,8 +1255,7 @@ def _update_task_progress(self, time_diff_hours: float):
         task.status = "completed"
         self._handle_task_completion(task)
 
-       
-'''    def _update_task_progress(self, time_diff: float):
+    def _update_task_progress(self, time_diff: float):
         """
         更新任务进度 - 优化版本（基于时间流逝而非每次LLM调用）
         策略：在创建任务时由LLM预估总时长，日常更新基于比例，只在突发事件时重新评估
@@ -1306,8 +1305,6 @@ def _update_task_progress(self, time_diff_hours: float):
 
             # 检查是否有后续影响
             self._handle_task_completion(task)
-'''
-
 
     def _llm_estimate_task_duration(self, task) -> float:
         """

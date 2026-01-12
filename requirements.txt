@@ -5,11 +5,11 @@ requests==2.31.0  # For DeepSeek API calls
 
 # Data handling and utilities
 python-dotenv==1.0.0  # For environment variables
-numpy==1.24.3  # For numerical operations
+numpy>=1.26.0  # For numerical operations (compatible with Python 3.13)
 
 # Vector Database and NLP for RAG system
-faiss-cpu==1.7.4  # Vector similarity search (CPU version, use faiss-gpu for CUDA)
-sentence-transformers==2.2.2  # Semantic embeddings
+faiss-cpu>=1.8.0  # Vector similarity search (CPU version, use faiss-gpu for CUDA)
+sentence-transformers>=2.7.0  # Semantic embeddings
 
 # Enhanced logging and console output
 rich==13.7.0
