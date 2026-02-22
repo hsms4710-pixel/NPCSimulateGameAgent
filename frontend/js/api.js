@@ -2,7 +2,7 @@
  * NPC 模拟器 API 客户端
  */
 class NPCApiClient {
-    constructor(baseUrl = 'http://127.0.0.1:8000') {
+    constructor(baseUrl = window.location.origin) {
         this.baseUrl = baseUrl;
         this.ws = null;
         this.wsCallbacks = {};

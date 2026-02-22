@@ -46,16 +46,27 @@ if exist "api_config.json" (
     echo         请在游戏界面 "设置" 中配置 API Key
 )
 
+:: 自动选择可用端口（优先 8080，备选 8888 9000）
+set PORT=8080
+netstat -ano | findstr ":%PORT% " | findstr "LISTENING" >nul 2>&1
+if not errorlevel 1 (
+    set PORT=8888
+    netstat -ano | findstr ":8888 " | findstr "LISTENING" >nul 2>&1
+    if not errorlevel 1 (
+        set PORT=9000
+    )
+)
+
 echo.
-echo  [*] 正在启动服务器...
-echo  [*] 访问地址: http://localhost:8000
+echo  [*] 正在启动服务器（端口 %PORT%）...
+echo  [*] 访问地址: http://localhost:%PORT%
 echo  [*] 按 Ctrl+C 停止服务
 echo.
 
-:: 延迟1秒后自动打开浏览器
-start "" /b cmd /c "timeout /t 2 >nul && start http://localhost:8000"
+:: 延迟2秒后自动打开浏览器
+start "" /b cmd /c "timeout /t 2 >nul && start http://localhost:%PORT%"
 
 :: 启动服务
-python -m uvicorn backend.api_server:app --host 0.0.0.0 --port 8000 --reload
+python -m uvicorn backend.api_server:app --host 127.0.0.1 --port %PORT% --reload
 
 pause
