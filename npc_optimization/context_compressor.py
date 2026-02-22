@@ -53,7 +53,7 @@ class ContextCompressor:
         return {
             "activity": npc_state.get("current_activity", "空闲"),
             "emotion": npc_state.get("current_emotion", "平静"),
-            "energy": npc_state.get("energy_level", 100),
+            "energy": npc_state.get("energy", 1.0),  # 使用新字段 (0.0-1.0)
             "time": npc_state.get("time", ""),
             "location": npc_state.get("location", ""),
             "needs": {

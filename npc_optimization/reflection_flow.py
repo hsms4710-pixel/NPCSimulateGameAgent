@@ -341,24 +341,48 @@ class ReflectionEngine:
         return patterns[:3]
 
     def _extract_emotional_shifts(self, text: str) -> Dict[str, float]:
-        """从文本中提取情感变化"""
-        # 简化实现：返回示例
-        return {
-            "happiness": 0.1,  # 变化值
-            "stress": -0.2,
-            "confidence": 0.15
+        """从反思文本中提取情感变化，无法提取时返回空字典"""
+        import re
+        result = {}
+        # 情感词到字段名的映射
+        emotion_map = {
+            "开心": "happiness", "快乐": "happiness", "高兴": "happiness",
+            "悲伤": "sadness", "难过": "sadness", "痛苦": "sadness",
+            "压力": "stress", "焦虑": "stress", "紧张": "stress",
+            "自信": "confidence", "勇气": "confidence",
+            "愤怒": "anger", "生气": "anger",
+            "平静": "calmness", "放松": "calmness",
         }
+        # 提取文本中的情感词及其附近的程度副词
+        increase_words = ["增加", "提升", "更加", "变得", "越来越", "上升"]
+        decrease_words = ["减少", "降低", "不再", "消退", "减弱", "下降"]
+        for emotion_cn, emotion_en in emotion_map.items():
+            if emotion_cn in text:
+                # 在情感词前后20字符内寻找程度方向词
+                idx = text.find(emotion_cn)
+                context_window = text[max(0, idx - 20): idx + 20]
+                if any(w in context_window for w in increase_words):
+                    result[emotion_en] = 0.15
+                elif any(w in context_window for w in decrease_words):
+                    result[emotion_en] = -0.15
+        return result
 
     def _extract_relationships(self, text: str) -> Dict[str, Dict[str, Any]]:
-        """从文本中提取关系信息"""
-        # 简化实现：返回示例
-        return {
-            "sample_npc": {
-                "affection_change": 0.1,
-                "trust_change": 0.05,
-                "status": "improving"
-            }
-        }
+        """从反思文本中提取真实关系变化，无法提取时返回空字典"""
+        result = {}
+        # 从 npc_profile 获取已知 NPC 名称列表用于匹配
+        known_npcs = self.npc_profile.get("known_npcs", [])
+        improve_words = ["改善", "变好", "更亲近", "信任", "友好", "和解"]
+        worsen_words = ["恶化", "变差", "疏远", "误会", "矛盾", "冲突"]
+        for npc_name in known_npcs:
+            if npc_name in text:
+                idx = text.find(npc_name)
+                context_window = text[max(0, idx - 30): idx + 30]
+                if any(w in context_window for w in improve_words):
+                    result[npc_name] = {"affection_change": 0.1, "trust_change": 0.05, "status": "improving"}
+                elif any(w in context_window for w in worsen_words):
+                    result[npc_name] = {"affection_change": -0.1, "trust_change": -0.05, "status": "worsening"}
+        return result
 
 
 class ReflectionFlowManager:
@@ -452,17 +476,20 @@ class ReflectionFlowManager:
 
     def _execute_periodic_reflection(self):
         """执行定期反思"""
-        
+
         npc_name = self.npc_profile.get("name", "NPC")
         logger.info(f"执行{npc_name}的定期反思（24小时检查点）")
-        
-        # 收集最近24小时的事件
+
+        # 收集最近24小时的事件，同时提取事件ID用于因果链
         recent_events = self._get_recent_events(hours=24)
-        
+
         if not recent_events:
             logger.info(f"{npc_name}: 无最近事件，跳过反思")
             return
-        
+
+        # 提取触发本次反思的事件ID列表
+        source_event_ids = [e.get("id", "") for e in recent_events if e.get("id")]
+
         # 执行多个反思任务
         reflections = [
             self.reflection_engine.execute_daily_summary(
@@ -483,11 +510,11 @@ class ReflectionFlowManager:
                 self._get_major_events(recent_events)
             )
         ]
-        
-        # 存储反思结果
+
+        # 存储反思结果，传入因果链事件ID
         for reflection in reflections:
             if reflection:
-                self._store_reflection_as_insight(reflection)
+                self._store_reflection_as_insight(reflection, source_event_ids=source_event_ids)
                 self.completed_reflections.append(reflection)
 
     def _execute_reflection_task(self, task: ReflectionTask) -> Optional[ReflectionResult]:
@@ -530,24 +557,25 @@ class ReflectionFlowManager:
             task.status = "failed"
             return None
 
-    def _store_reflection_as_insight(self, reflection: ReflectionResult):
-        """将反思结果存入RAG系统"""
-        
+    def _store_reflection_as_insight(self, reflection: ReflectionResult,
+                                      source_event_ids: Optional[List[str]] = None):
+        """将反思结果存入RAG系统，并填充因果溯源链"""
+
         from npc_optimization.memory_layers import Insight
-        
+
         insight = Insight(
             id=f"reflection_{reflection.id}",
             created_at=reflection.generated_at,
-            source_event_ids=[],
+            source_event_ids=source_event_ids or [],  # 填充触发反思的事件ID
             insight_text=reflection.summary_text,
             insight_type=reflection.reflection_type.value,
-            emotional_weight=0,
+            emotional_weight=int(sum(reflection.emotional_shifts.values()) * 5) if reflection.emotional_shifts else 0,
             relevance_score=reflection.confidence_score,
             keywords=reflection.key_insights[:3]
         )
-        
+
         self.memory_manager.add_reflection_insight(insight)
-        logger.info(f"已存储反思见解: {insight.id}")
+        logger.info(f"已存储反思见解: {insight.id}，关联事件: {len(source_event_ids or [])} 条")
 
     def _get_recent_events(self, hours: int = 24) -> List[Dict[str, Any]]:
         """获取最近N小时的事件"""
@@ -556,9 +584,19 @@ class ReflectionFlowManager:
         return context.get("hot_memory", {}).get("recent_events", [])
 
     def _get_current_goals(self) -> List[str]:
-        """获取当前活跃目标"""
-        # 应该从NPC系统获取
-        return ["生存", "获得尊重", "实现目标"]
+        """从 memory_layer_manager 读取真实活跃目标"""
+        try:
+            context = self.memory_manager.get_decision_context()
+            active_tasks = context.get("hot_memory", {}).get("active_tasks", {})
+            if active_tasks:
+                return [task.get("description", "") for task in active_tasks.values() if task.get("description")][:5]
+        except Exception as e:
+            logger.warning(f"读取活跃目标失败: {e}")
+        # fallback：从 npc_profile 中读取配置的目标
+        goals = self.npc_profile.get("goals", {})
+        short_term = goals.get("short_term", [])
+        long_term = goals.get("long_term", [])
+        return (short_term + long_term)[:5] or ["维持日常生活"]
 
     def _analyze_behavior_frequency(self, events: List[Dict[str, Any]]) -> Dict[str, int]:
         """分析行为频率"""
@@ -569,8 +607,36 @@ class ReflectionFlowManager:
         return frequency
 
     def _get_emotional_history(self) -> List[Dict[str, Any]]:
-        """获取情感历史"""
-        return []
+        """从记忆层提取情感历史"""
+        try:
+            context = self.memory_manager.get_decision_context()
+            recent_events = context.get("hot_memory", {}).get("recent_events", [])
+            history = []
+            for event in recent_events:
+                # 提取含有情感状态字段的事件
+                state_after = event.get("state_after", {})
+                emotion = state_after.get("emotion") or event.get("emotion") or event.get("emotional_state")
+                if emotion:
+                    history.append({
+                        "timestamp": event.get("timestamp", ""),
+                        "emotion": emotion,
+                        "event_type": event.get("event_type", "unknown"),
+                        "content_snippet": event.get("content", "")[:50]
+                    })
+            # 同时从温记忆 Insight 中提取情感权重信息
+            warm_insights = context.get("warm_insights", [])
+            for insight in warm_insights:
+                if insight.get("emotional_weight", 0) != 0:
+                    history.append({
+                        "timestamp": insight.get("created_at", ""),
+                        "emotional_weight": insight.get("emotional_weight"),
+                        "source": "insight",
+                        "content_snippet": insight.get("insight_text", "")[:50]
+                    })
+            return history
+        except Exception as e:
+            logger.warning(f"读取情感历史失败: {e}")
+            return []
 
     def _get_major_events(self, recent_events: List[Dict[str, Any]]) -> List[str]:
         """识别主要事件"""

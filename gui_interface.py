@@ -10,15 +10,471 @@ import logging
 import os
 from dotenv import load_dotenv
 
-from deepseek_client import DeepSeekClient
-from npc_system import NPCBehaviorSystem, NPCAction, Emotion
-from world_lore import NPC_TEMPLATES, ENVIRONMENTAL_EVENTS
-from world_clock import get_world_clock
+from backend.deepseek_client import DeepSeekClient
+from npc_core import NPCBehaviorSystem
+from core_types import NPCAction, Emotion
+from world_simulator.world_lore import NPC_TEMPLATES, ENVIRONMENTAL_EVENTS
+from world_simulator.world_clock import get_world_clock
+from npc_optimization.event_coordinator import EventCoordinator, NPCRole, NPCEventResponse, EventAnalysis
+import asyncio
 
 logger = logging.getLogger(__name__)
 
 # 加载环境变量
 load_dotenv()
+
+# API 配置文件路径
+API_CONFIG_FILE = os.path.join(os.path.dirname(__file__), "api_config.json")
+
+# 默认 API 配置
+DEFAULT_API_CONFIG = {
+    "provider": "deepseek",
+    "api_key": "",
+    "api_base": "https://api.deepseek.com/v1",
+    "model": "deepseek-chat"
+}
+
+
+def load_api_config() -> dict:
+    """加载 API 配置"""
+    if os.path.exists(API_CONFIG_FILE):
+        try:
+            with open(API_CONFIG_FILE, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                # 合并默认配置
+                return {**DEFAULT_API_CONFIG, **config}
+        except Exception as e:
+            logger.warning(f"加载 API 配置失败: {e}")
+    return DEFAULT_API_CONFIG.copy()
+
+
+def save_api_config(config: dict) -> bool:
+    """保存 API 配置"""
+    try:
+        with open(API_CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        logger.error(f"保存 API 配置失败: {e}")
+        return False
+
+
+class APIConfigDialog:
+    """API 配置对话框"""
+
+    def __init__(self, parent, current_config: dict, on_save_callback=None):
+        self.result = None
+        self.on_save_callback = on_save_callback
+
+        # 创建对话框窗口
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title("API 配置")
+        self.dialog.geometry("500x400")
+        self.dialog.resizable(False, False)
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+
+        # 居中显示
+        self.dialog.update_idletasks()
+        x = (self.dialog.winfo_screenwidth() - 500) // 2
+        y = (self.dialog.winfo_screenheight() - 400) // 2
+        self.dialog.geometry(f"+{x}+{y}")
+
+        self.current_config = current_config
+        self.setup_ui()
+
+    def setup_ui(self):
+        """设置界面"""
+        main_frame = ttk.Frame(self.dialog, padding=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # 标题
+        title_label = ttk.Label(main_frame, text="大模型 API 配置", font=("Arial", 14, "bold"))
+        title_label.pack(pady=(0, 20))
+
+        # 配置表单
+        form_frame = ttk.Frame(main_frame)
+        form_frame.pack(fill=tk.X, pady=(0, 20))
+
+        # 提供商选择
+        ttk.Label(form_frame, text="API 提供商:", font=("Arial", 10)).grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.provider_var = tk.StringVar(value=self.current_config.get("provider", "deepseek"))
+        provider_combo = ttk.Combobox(form_frame, textvariable=self.provider_var,
+                                       values=["deepseek", "openai", "custom"],
+                                       state="readonly", width=40)
+        provider_combo.grid(row=0, column=1, sticky=tk.W, pady=5, padx=(10, 0))
+        provider_combo.bind("<<ComboboxSelected>>", self.on_provider_changed)
+
+        # API Key
+        ttk.Label(form_frame, text="API Key:", font=("Arial", 10)).grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.api_key_var = tk.StringVar(value=self.current_config.get("api_key", ""))
+        self.api_key_entry = ttk.Entry(form_frame, textvariable=self.api_key_var, width=43, show="*")
+        self.api_key_entry.grid(row=1, column=1, sticky=tk.W, pady=5, padx=(10, 0))
+
+        # 显示/隐藏密钥按钮
+        self.show_key = tk.BooleanVar(value=False)
+        ttk.Checkbutton(form_frame, text="显示", variable=self.show_key,
+                        command=self.toggle_key_visibility).grid(row=1, column=2, padx=(5, 0))
+
+        # API Base URL
+        ttk.Label(form_frame, text="API Base URL:", font=("Arial", 10)).grid(row=2, column=0, sticky=tk.W, pady=5)
+        self.api_base_var = tk.StringVar(value=self.current_config.get("api_base", "https://api.deepseek.com/v1"))
+        self.api_base_entry = ttk.Entry(form_frame, textvariable=self.api_base_var, width=43)
+        self.api_base_entry.grid(row=2, column=1, sticky=tk.W, pady=5, padx=(10, 0))
+
+        # 模型选择
+        ttk.Label(form_frame, text="模型:", font=("Arial", 10)).grid(row=3, column=0, sticky=tk.W, pady=5)
+        self.model_var = tk.StringVar(value=self.current_config.get("model", "deepseek-chat"))
+        self.model_combo = ttk.Combobox(form_frame, textvariable=self.model_var, width=40)
+        self.model_combo.grid(row=3, column=1, sticky=tk.W, pady=5, padx=(10, 0))
+        self.update_model_options()
+
+        # 测试连接状态
+        self.status_frame = ttk.Frame(main_frame)
+        self.status_frame.pack(fill=tk.X, pady=(0, 20))
+
+        self.status_label = ttk.Label(self.status_frame, text="", font=("Arial", 9))
+        self.status_label.pack(side=tk.LEFT)
+
+        # 按钮区域
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X)
+
+        ttk.Button(button_frame, text="测试连接", command=self.test_connection).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(button_frame, text="保存配置", command=self.save_config).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Button(button_frame, text="取消", command=self.cancel).pack(side=tk.RIGHT)
+
+        # 帮助信息
+        help_frame = ttk.LabelFrame(main_frame, text="帮助", padding=10)
+        help_frame.pack(fill=tk.X, pady=(20, 0))
+
+        help_text = """• DeepSeek: 访问 https://platform.deepseek.com/ 获取 API Key
+• OpenAI: 访问 https://platform.openai.com/ 获取 API Key
+• 配置将保存到本地 api_config.json 文件"""
+        ttk.Label(help_frame, text=help_text, font=("Arial", 9), foreground="gray").pack(anchor=tk.W)
+
+    def toggle_key_visibility(self):
+        """切换密钥可见性"""
+        if self.show_key.get():
+            self.api_key_entry.config(show="")
+        else:
+            self.api_key_entry.config(show="*")
+
+    def on_provider_changed(self, event=None):
+        """提供商变更时更新默认值"""
+        provider = self.provider_var.get()
+        if provider == "deepseek":
+            self.api_base_var.set("https://api.deepseek.com/v1")
+            self.model_var.set("deepseek-chat")
+        elif provider == "openai":
+            self.api_base_var.set("https://api.openai.com/v1")
+            self.model_var.set("gpt-3.5-turbo")
+        self.update_model_options()
+
+    def update_model_options(self):
+        """更新模型选项"""
+        provider = self.provider_var.get()
+        if provider == "deepseek":
+            models = ["deepseek-chat", "deepseek-coder", "deepseek-reasoner"]
+        elif provider == "openai":
+            models = ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo", "gpt-4o"]
+        else:
+            models = ["custom-model"]
+        self.model_combo["values"] = models
+
+    def test_connection(self):
+        """测试 API 连接"""
+        api_key = self.api_key_var.get().strip()
+        api_base = self.api_base_var.get().strip()
+        model = self.model_var.get().strip()
+
+        if not api_key:
+            self.status_label.config(text="❌ 请输入 API Key", foreground="red")
+            return
+
+        self.status_label.config(text="⏳ 正在测试连接...", foreground="blue")
+        self.dialog.update()
+
+        # 在线程中测试连接
+        def do_test():
+            try:
+                client = DeepSeekClient(api_key=api_key, model=model)
+                # 如果有自定义 base_url，需要修改
+                if api_base and api_base != "https://api.deepseek.com/v1":
+                    client.base_url = api_base
+
+                response = client.generate_response("你好", max_tokens=10)
+                if response:
+                    self.dialog.after(0, lambda: self.status_label.config(
+                        text=f"✅ 连接成功！模型响应正常", foreground="green"))
+                else:
+                    self.dialog.after(0, lambda: self.status_label.config(
+                        text="❌ 连接失败：无响应", foreground="red"))
+            except Exception as e:
+                error_msg = str(e)[:50]
+                self.dialog.after(0, lambda: self.status_label.config(
+                    text=f"❌ 连接失败: {error_msg}", foreground="red"))
+
+        threading.Thread(target=do_test, daemon=True).start()
+
+    def save_config(self):
+        """保存配置"""
+        config = {
+            "provider": self.provider_var.get(),
+            "api_key": self.api_key_var.get().strip(),
+            "api_base": self.api_base_var.get().strip(),
+            "model": self.model_var.get().strip()
+        }
+
+        if not config["api_key"]:
+            messagebox.showerror("错误", "请输入 API Key")
+            return
+
+        if save_api_config(config):
+            self.result = config
+            messagebox.showinfo("成功", "API 配置已保存！")
+            if self.on_save_callback:
+                self.on_save_callback(config)
+            self.dialog.destroy()
+        else:
+            messagebox.showerror("错误", "保存配置失败")
+
+    def cancel(self):
+        """取消"""
+        self.result = None
+        self.dialog.destroy()
+
+
+class WorldCreatorDialog:
+    """世界创建对话框"""
+
+    THEMES = {
+        "medieval_fantasy": "中世纪奇幻",
+        "eastern_martial": "东方武侠",
+        "steampunk": "蒸汽朋克",
+        "post_apocalyptic": "末世废土"
+    }
+
+    def __init__(self, parent, deepseek_client, on_world_created=None):
+        self.result = None
+        self.deepseek_client = deepseek_client
+        self.on_world_created = on_world_created
+        self.generator = None
+        self.is_generating = False
+
+        # 创建对话框窗口
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title("创建新世界")
+        self.dialog.geometry("600x500")
+        self.dialog.resizable(False, False)
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+
+        # 居中显示
+        self.dialog.update_idletasks()
+        x = (self.dialog.winfo_screenwidth() - 600) // 2
+        y = (self.dialog.winfo_screenheight() - 500) // 2
+        self.dialog.geometry(f"+{x}+{y}")
+
+        self.setup_ui()
+
+    def setup_ui(self):
+        """设置界面"""
+        main_frame = ttk.Frame(self.dialog, padding=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # 标题
+        title_label = ttk.Label(main_frame, text="创建你的世界", font=("Arial", 14, "bold"))
+        title_label.pack(pady=(0, 20))
+
+        # 世界主题
+        theme_frame = ttk.LabelFrame(main_frame, text="世界主题", padding=10)
+        theme_frame.pack(fill=tk.X, pady=(0, 15))
+
+        self.theme_var = tk.StringVar(value="medieval_fantasy")
+        for theme_key, theme_name in self.THEMES.items():
+            rb = ttk.Radiobutton(
+                theme_frame,
+                text=theme_name,
+                variable=self.theme_var,
+                value=theme_key
+            )
+            rb.pack(side=tk.LEFT, padx=10)
+
+        # 世界描述
+        desc_frame = ttk.LabelFrame(main_frame, text="世界描述", padding=10)
+        desc_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+
+        self.description_text = scrolledtext.ScrolledText(
+            desc_frame,
+            height=6,
+            font=("Arial", 10),
+            wrap=tk.WORD
+        )
+        self.description_text.pack(fill=tk.BOTH, expand=True)
+        self.description_text.insert(
+            tk.END,
+            "一个被古老魔法笼罩的神秘山谷小镇，居民们世代守护着一颗沉睡的龙蛋..."
+        )
+
+        # NPC数量
+        npc_frame = ttk.Frame(main_frame)
+        npc_frame.pack(fill=tk.X, pady=(0, 15))
+
+        ttk.Label(npc_frame, text="NPC数量:").pack(side=tk.LEFT, padx=(0, 10))
+        self.npc_count_var = tk.IntVar(value=5)
+        npc_spinbox = ttk.Spinbox(
+            npc_frame,
+            from_=3,
+            to=10,
+            textvariable=self.npc_count_var,
+            width=5
+        )
+        npc_spinbox.pack(side=tk.LEFT)
+
+        # 状态标签
+        self.status_label = ttk.Label(main_frame, text="", font=("Arial", 9))
+        self.status_label.pack(pady=(0, 10))
+
+        # 进度条
+        self.progress_var = tk.DoubleVar(value=0)
+        self.progress_bar = ttk.Progressbar(
+            main_frame,
+            variable=self.progress_var,
+            maximum=100
+        )
+        self.progress_bar.pack(fill=tk.X, pady=(0, 15))
+
+        # 按钮
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(fill=tk.X)
+
+        self.generate_btn = ttk.Button(
+            btn_frame,
+            text="生成世界",
+            command=self.start_generation
+        )
+        self.generate_btn.pack(side=tk.RIGHT, padx=(10, 0))
+
+        ttk.Button(
+            btn_frame,
+            text="取消",
+            command=self.cancel
+        ).pack(side=tk.RIGHT)
+
+    def start_generation(self):
+        """开始生成世界"""
+        if self.is_generating:
+            return
+
+        description = self.description_text.get("1.0", tk.END).strip()
+        if not description:
+            messagebox.showerror("错误", "请输入世界描述")
+            return
+
+        self.is_generating = True
+        self.generate_btn.config(state=tk.DISABLED)
+        self.status_label.config(text="正在使用AI生成世界...")
+        self.progress_var.set(10)
+
+        # 在后台线程中生成
+        threading.Thread(target=self._do_generate, daemon=True).start()
+
+    def _do_generate(self):
+        """在后台线程中生成世界"""
+        try:
+            from world_simulator.world_generator import WorldGenerator, WorldTheme
+
+            theme = self.theme_var.get()
+            description = self.description_text.get("1.0", tk.END).strip()
+            npc_count = self.npc_count_var.get()
+
+            # 更新状态
+            self.dialog.after(0, lambda: self.status_label.config(text="正在初始化世界生成器..."))
+            self.dialog.after(0, lambda: self.progress_var.set(20))
+
+            # 创建生成器
+            self.generator = WorldGenerator(llm_client=self.deepseek_client)
+
+            # 更新状态
+            self.dialog.after(0, lambda: self.status_label.config(text="正在生成世界背景..."))
+            self.dialog.after(0, lambda: self.progress_var.set(40))
+
+            # 运行异步生成
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                theme_enum = WorldTheme(theme)
+                world_config, locations, npcs = loop.run_until_complete(
+                    self.generator.generate_world(
+                        user_description=description,
+                        theme=theme_enum,
+                        npc_count=npc_count
+                    )
+                )
+
+                # 更新状态
+                self.dialog.after(0, lambda: self.status_label.config(text="正在保存世界..."))
+                self.dialog.after(0, lambda: self.progress_var.set(80))
+
+                # 保存世界
+                save_path = self.generator.save_world()
+
+                # 完成
+                self.dialog.after(0, lambda: self.progress_var.set(100))
+                self.dialog.after(0, lambda: self._on_generation_complete(
+                    world_config, locations, npcs, save_path
+                ))
+
+            finally:
+                loop.close()
+
+        except Exception as e:
+            logger.error(f"世界生成失败: {e}")
+            self.dialog.after(0, lambda: self._on_generation_error(str(e)))
+
+    def _on_generation_complete(self, world_config, locations, npcs, save_path):
+        """生成完成"""
+        self.is_generating = False
+        self.generate_btn.config(state=tk.NORMAL)
+        self.status_label.config(text=f"世界 '{world_config.world_name}' 创建成功!")
+
+        self.result = {
+            "world_config": world_config,
+            "locations": locations,
+            "npcs": npcs,
+            "save_path": save_path
+        }
+
+        messagebox.showinfo(
+            "成功",
+            f"世界 '{world_config.world_name}' 创建成功!\n"
+            f"位置数量: {len(locations)}\n"
+            f"NPC数量: {len(npcs)}\n"
+            f"保存路径: {save_path}"
+        )
+
+        if self.on_world_created:
+            self.on_world_created(self.result)
+
+        self.dialog.destroy()
+
+    def _on_generation_error(self, error_msg):
+        """生成失败"""
+        self.is_generating = False
+        self.generate_btn.config(state=tk.NORMAL)
+        self.status_label.config(text=f"生成失败: {error_msg[:50]}")
+        self.progress_var.set(0)
+        messagebox.showerror("错误", f"世界生成失败:\n{error_msg}")
+
+    def cancel(self):
+        """取消"""
+        if self.is_generating:
+            if not messagebox.askyesno("确认", "正在生成中，确定要取消吗？"):
+                return
+        self.result = None
+        self.dialog.destroy()
+
 
 class NPCSimulatorGUI:
     """基于Tkinter的NPC模拟器GUI"""
@@ -29,15 +485,26 @@ class NPCSimulatorGUI:
         self.root.geometry("1200x800")
         self.root.configure(bg='#f0f0f0')
 
-        # 初始化DeepSeek客户端（从环境变量读取API key）
-        api_key = os.getenv('DEEPSEEK_API_KEY')
-        if not api_key:
-            raise ValueError("DEEPSEEK_API_KEY 环境变量未设置，请检查 .env 文件")
-        self.deepseek_client = DeepSeekClient(api_key)
+        # 加载 API 配置
+        self.api_config = load_api_config()
+
+        # 初始化 DeepSeek 客户端
+        self.deepseek_client = None
+        if not self._init_api_client():
+            # 如果没有配置 API Key，显示配置对话框
+            self.root.withdraw()  # 暂时隐藏主窗口
+            self._show_initial_config_dialog()
+            self.root.deiconify()  # 重新显示主窗口
 
         # NPC实例
         self.npc_system: Optional[NPCBehaviorSystem] = None
         self.selected_npc_template = "elder_blacksmith"
+
+        # EventCoordinator（主Agent）用于多NPC事件协调
+        self.event_coordinator: Optional[EventCoordinator] = None
+
+        # 是否使用ReAct模式处理事件
+        self.use_react_mode = True
 
         # 界面组件
         self.setup_ui()
@@ -48,7 +515,7 @@ class NPCSimulatorGUI:
 
         # 活动日志
         self.activity_log: List[str] = []
-        
+
         # Token 统计信息
         self.token_stats = {
             "total_tokens_sent": 0,
@@ -61,6 +528,86 @@ class NPCSimulatorGUI:
 
         # 初始化界面
         self.initialize_simulation()
+
+    def _init_api_client(self) -> bool:
+        """初始化 API 客户端"""
+        api_key = self.api_config.get("api_key", "")
+
+        # 优先使用配置文件，其次使用环境变量
+        if not api_key:
+            api_key = os.getenv('DEEPSEEK_API_KEY', '')
+
+        if api_key:
+            try:
+                model = self.api_config.get("model", "deepseek-chat")
+                self.deepseek_client = DeepSeekClient(api_key=api_key, model=model)
+
+                # 如果有自定义 base_url
+                api_base = self.api_config.get("api_base", "")
+                if api_base and api_base != "https://api.deepseek.com/v1":
+                    self.deepseek_client.base_url = api_base
+
+                logger.info(f"API 客户端初始化成功，使用模型: {model}")
+                return True
+            except Exception as e:
+                logger.error(f"API 客户端初始化失败: {e}")
+                return False
+        return False
+
+    def _show_initial_config_dialog(self):
+        """显示初始配置对话框"""
+        # 创建一个临时的顶层窗口作为父窗口
+        temp_root = tk.Tk()
+        temp_root.withdraw()
+
+        # 显示欢迎消息
+        messagebox.showinfo("欢迎", "欢迎使用艾伦谷 NPC 行为模拟器！\n\n请先配置大模型 API 以启用智能对话功能。")
+
+        # 显示配置对话框
+        dialog = APIConfigDialog(temp_root, self.api_config, on_save_callback=self._on_api_config_saved)
+        temp_root.wait_window(dialog.dialog)
+
+        # 如果用户取消了配置
+        if dialog.result is None:
+            if not self.deepseek_client:
+                if messagebox.askyesno("提示", "未配置 API Key，部分功能将不可用。\n是否继续？"):
+                    pass
+                else:
+                    temp_root.destroy()
+                    self.root.destroy()
+                    exit(0)
+
+        temp_root.destroy()
+
+    def _on_api_config_saved(self, config: dict):
+        """API 配置保存后的回调"""
+        self.api_config = config
+        self._init_api_client()
+
+    def open_api_config(self):
+        """打开 API 配置对话框"""
+        dialog = APIConfigDialog(self.root, self.api_config, on_save_callback=self._on_api_config_saved)
+        self.root.wait_window(dialog.dialog)
+
+    def open_world_creator(self):
+        """打开世界创建对话框"""
+        if not self.deepseek_client:
+            messagebox.showerror("错误", "请先配置 API Key")
+            self.open_api_config()
+            return
+
+        def on_world_created(result):
+            """世界创建完成回调"""
+            if result:
+                self.add_activity_log(f"✨ 新世界 '{result['world_config'].world_name}' 创建成功!")
+                self.add_activity_log(f"   包含 {len(result['locations'])} 个位置, {len(result['npcs'])} 个NPC")
+
+        dialog = WorldCreatorDialog(
+            self.root,
+            self.deepseek_client,
+            on_world_created=on_world_created
+        )
+        self.root.wait_window(dialog.dialog)
 
     def setup_ui(self):
         """设置用户界面"""
@@ -147,6 +694,12 @@ class NPCSimulatorGUI:
 
         # 重置按钮
         ttk.Button(clock_frame, text="重置模拟", command=self.reset_simulation).pack(side=tk.LEFT, padx=(10, 0))
+
+        # API 配置按钮
+        ttk.Button(clock_frame, text="API配置", command=self.open_api_config).pack(side=tk.LEFT, padx=(5, 0))
+
+        # 创建世界按钮
+        ttk.Button(clock_frame, text="创建世界", command=self.open_world_creator).pack(side=tk.LEFT, padx=(5, 0))
 
         # 状态指示器
         self.autonomous_indicator = ttk.Label(clock_frame, text="自主运行中", foreground="green", font=("Arial", 9, "bold"))
@@ -394,31 +947,41 @@ class NPCSimulatorGUI:
         self.switch_event_mode()
 
     def trigger_preset_event(self, event_description):
-        """触发预设事件 - 使用新的持久化架构"""
-        result = self.npc_system.process_event(event_description, "preset_event")
+        """触发预设事件 - 支持ReAct模式和传统模式"""
+        # 清空推理面板，准备显示新的思考过程
+        self.clear_thinking_panel()
 
-        if result['should_respond']:
-            # 显示NPC的智能回应（如果适用）
-            if result['response_text']:
-                self.add_dialogue_entry(self.npc_system.config["name"], result['response_text'])
-
-            # 记录事件处理
-            self.add_activity_log(
-                "预设事件",
-                f"触发事件：{event_description} | 影响度：{result['impact_analysis']['impact_score']}"
-            )
-
-            # 显示状态变化
-            if result['state_changed']:
-                self.add_activity_log("状态变化", "NPC状态已发生变化")
-
-            if result['new_task_created']:
-                self.add_activity_log("任务创建", f"新任务：{result['task_description']}")
-
-            # 更新显示
-            self.update_character_card()
+        # 根据use_react_mode选择处理模式
+        if self.use_react_mode and self.event_coordinator:
+            # 使用ReAct模式处理（异步）
+            self.add_activity_log("预设事件", f"触发事件（ReAct模式）：{event_description}")
+            self._run_async_event_with_react(event_description, "preset_event")
         else:
-            self.add_activity_log("事件过滤", f"预设事件 '{event_description}' 影响度不足，未触发响应")
+            # 使用传统模式处理
+            result = self.npc_system.process_event(event_description, "preset_event")
+
+            if result['should_respond']:
+                # 显示NPC的智能回应（如果适用）
+                if result['response_text']:
+                    self.add_dialogue_entry(self.npc_system.config["name"], result['response_text'])
+
+                # 记录事件处理
+                self.add_activity_log(
+                    "预设事件",
+                    f"触发事件：{event_description} | 影响度：{result['impact_analysis']['impact_score']}"
+                )
+
+                # 显示状态变化
+                if result['state_changed']:
+                    self.add_activity_log("状态变化", "NPC状态已发生变化")
+
+                if result['new_task_created']:
+                    self.add_activity_log("任务创建", f"新任务：{result['task_description']}")
+
+                # 更新显示
+                self.update_character_card()
+            else:
+                self.add_activity_log("事件过滤", f"预设事件 '{event_description}' 影响度不足，未触发响应")
 
     def switch_event_mode(self):
         """切换事件输入模式"""
@@ -539,7 +1102,7 @@ class NPCSimulatorGUI:
         current_state = {
             "current_activity": self.npc_system.current_activity.value if self.npc_system.current_activity else "空闲",
             "current_emotion": self.npc_system.current_emotion.value,
-            "energy_level": self.npc_system.energy_level,
+            "energy": int(self.npc_system.energy * 100),  # 转换为百分比显示
             "time": self.npc_system.current_time.strftime("%H:%M")
         }
 
@@ -554,7 +1117,7 @@ class NPCSimulatorGUI:
 当前状态：
 - 正在做的事情：{current_state['current_activity']}
 - 当前情感：{current_state['current_emotion']}
-- 能量水平：{current_state['energy_level']}/100
+- 能量水平：{current_state['energy']}%
 - 当前时间：{current_state['time']}
 
 事件分析：
@@ -579,7 +1142,7 @@ class NPCSimulatorGUI:
 当前状态：
 - 正在做的事情：{current_state['current_activity']}
 - 当前情感：{current_state['current_emotion']}
-- 能量水平：{current_state['energy_level']}/100
+- 能量水平：{current_state['energy']}%
 - 当前时间：{current_state['time']}
 
 活动限制：{activity_constraint}
@@ -606,8 +1169,8 @@ class NPCSimulatorGUI:
 
     def _get_activity_constraint(self, current_activity: str) -> str:
         """获取当前活动的约束描述"""
-        # 使用NPCAction枚举的统一定义
-        from npc_system import NPCAction
+        # 使用core_types中的NPCAction枚举
+        from core_types import NPCAction
         try:
             # 查找匹配的活动枚举
             for action in NPCAction:
@@ -672,14 +1235,14 @@ class NPCSimulatorGUI:
         if emotional_response in emotion_mapping:
             self.npc_system.current_emotion = emotion_mapping[emotional_response]
 
-        # 更新能量水平（事件处理会消耗一些能量）
-        energy_cost = 5  # 基础消耗
+        # 更新能量水平（事件处理会消耗一些能量）- 使用新字段 (0.0-1.0)
+        energy_cost = 0.05  # 基础消耗
         if event_analysis.get('urgency') == 'high':
-            energy_cost = 15  # 紧急事件消耗更多
+            energy_cost = 0.15  # 紧急事件消耗更多
         elif event_analysis.get('urgency') == 'medium':
-            energy_cost = 10
+            energy_cost = 0.10
 
-        self.npc_system.energy_level = max(0, self.npc_system.energy_level - energy_cost)
+        self.npc_system.energy = max(0.0, self.npc_system.energy - energy_cost)
 
         # 添加记忆
         memory_content = f"事件：{event_data['content']}，回应：{npc_response[:50]}..."
@@ -713,6 +1276,58 @@ class NPCSimulatorGUI:
         )
         self.activity_text.pack(fill=tk.BOTH, expand=True)
         self.activity_text.config(state=tk.DISABLED)
+
+    def create_react_thinking_panel(self, parent):
+        """创建 ReAct 思考过程面板"""
+        thinking_frame = ttk.LabelFrame(parent, text="推理过程", padding=5)
+        thinking_frame.pack(fill=tk.X, pady=(0, 5))
+
+        # 思考过程文本框
+        self.thinking_text = scrolledtext.ScrolledText(
+            thinking_frame,
+            height=6,
+            width=40,
+            wrap=tk.WORD,
+            font=("Consolas", 9),
+            bg="#f8f8f8"
+        )
+        self.thinking_text.pack(fill=tk.BOTH, expand=True)
+        self.thinking_text.config(state=tk.DISABLED)
+
+        # 配置标签样式
+        self.thinking_text.tag_configure("step", foreground="#0066cc", font=("Consolas", 9, "bold"))
+        self.thinking_text.tag_configure("thought", foreground="#333333")
+        self.thinking_text.tag_configure("action", foreground="#009900")
+        self.thinking_text.tag_configure("observation", foreground="#cc6600")
+
+    def add_thinking_step(self, step_type: str, content: str):
+        """添加思考步骤到面板"""
+        self.thinking_text.config(state=tk.NORMAL)
+
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        tag = "thought"
+
+        if step_type.lower() in ["action", "行动"]:
+            tag = "action"
+        elif step_type.lower() in ["observation", "观察"]:
+            tag = "observation"
+
+        self.thinking_text.insert(tk.END, f"[{timestamp}] ", "step")
+        self.thinking_text.insert(tk.END, f"{step_type}: ", "step")
+        self.thinking_text.insert(tk.END, f"{content}\n", tag)
+
+        self.thinking_text.see(tk.END)
+        self.thinking_text.config(state=tk.DISABLED)
+
+    def clear_thinking_panel(self):
+        """清空思考面板"""
+        self.thinking_text.config(state=tk.NORMAL)
+        self.thinking_text.delete(1.0, tk.END)
+        self.thinking_text.config(state=tk.DISABLED)
+
+    def add_react_thinking(self, step_type: str, content: str):
+        """ReAct 思考过程回调 - NPC系统调用此方法显示推理过程"""
+        self.add_thinking_step(step_type, content)
 
     def create_dialogue_panel(self, parent):
         """创建对话面板"""
@@ -750,7 +1365,10 @@ class NPCSimulatorGUI:
 
             npc_config = NPC_TEMPLATES[self.selected_npc_template]
             self.npc_system = NPCBehaviorSystem(npc_config, self.deepseek_client)
-            
+
+            # 初始化EventCoordinator（主Agent）
+            self._init_event_coordinator()
+
             # 设置GUI更新回调，让自主行为循环能通知GUI更新
             self.npc_system.gui_update_callback = self.update_character_card
             
@@ -765,6 +1383,191 @@ class NPCSimulatorGUI:
         except Exception as e:
             logger.error(f"初始化失败: {e}")
             messagebox.showerror("错误", f"初始化失败: {str(e)}")
+
+    def _init_event_coordinator(self):
+        """初始化EventCoordinator主Agent，用于多NPC事件协调"""
+        if not self.npc_system or not self.deepseek_client:
+            logger.warning("无法初始化EventCoordinator: npc_system或deepseek_client未就绪")
+            return
+
+        try:
+            # 创建EventCoordinator
+            self.event_coordinator = EventCoordinator(
+                llm_client=self.deepseek_client
+            )
+
+            # 注册当前NPC作为子Agent
+            # 创建异步处理器用于NPC的ReAct响应
+            async_processor = self.npc_system.create_async_processor()
+
+            self.event_coordinator.register_npc(
+                npc_name=self.npc_system.config['name'],
+                npc_location=self.npc_system.current_location,
+                npc_status={
+                    'current_activity': self.npc_system.current_activity.value if self.npc_system.current_activity else "空闲",
+                    'emotion': self.npc_system.current_emotion.value,
+                    'energy': self.npc_system.energy,  # 使用新字段 (0.0-1.0)
+                    'profession': self.npc_system.config.get('profession', '未知')
+                },
+                processor=async_processor
+            )
+
+            self.add_activity_log("系统", "EventCoordinator主Agent已初始化")
+            logger.info(f"EventCoordinator初始化成功，已注册NPC: {self.npc_system.config['name']}")
+
+        except Exception as e:
+            logger.error(f"EventCoordinator初始化失败: {e}")
+            self.event_coordinator = None
+
+    def _run_async_event_with_react(self, event_content: str, event_type: str = "general"):
+        """
+        在后台线程中运行异步事件处理（ReAct模式）
+
+        Args:
+            event_content: 事件内容
+            event_type: 事件类型
+        """
+        def run_in_thread():
+            # 创建新的事件循环
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            try:
+                result = loop.run_until_complete(
+                    self._process_event_with_react_async(event_content, event_type)
+                )
+                # 在主线程中更新GUI
+                self.root.after(0, lambda: self._handle_react_event_result(result))
+            except Exception as e:
+                logger.error(f"ReAct事件处理失败: {e}")
+                self.root.after(0, lambda: self.add_activity_log("错误", f"ReAct处理失败: {e}"))
+            finally:
+                loop.close()
+
+        # 在后台线程中运行
+        threading.Thread(target=run_in_thread, daemon=True).start()
+
+    async def _process_event_with_react_async(self, event_content: str, event_type: str):
+        """
+        使用EventCoordinator和ReAct模式异步处理事件
+
+        返回值结构:
+        {
+            'event_analysis': EventAnalysis,  # 主Agent分析结果
+            'npc_responses': [NPCEventResponse, ...],  # 各NPC响应
+            'coordinator_summary': str  # 协调器总结
+        }
+        """
+        if not self.event_coordinator:
+            # 回退到传统处理
+            result = self.npc_system.process_event(event_content, event_type)
+            return {'fallback': True, 'result': result}
+
+        # 更新NPC状态到Coordinator
+        self._update_coordinator_npc_status()
+
+        # 1. 主Agent分析事件
+        self.add_thinking_step("主Agent", f"正在分析事件: {event_content[:50]}...")
+
+        event_analysis = await self.event_coordinator.analyze_event_async(
+            event_content=event_content,
+            event_type=event_type
+        )
+
+        self.add_thinking_step("分析结果",
+            f"优先级: {event_analysis.priority.value}, "
+            f"影响NPC数: {len(event_analysis.affected_npcs)}"
+        )
+
+        # 2. 分发到各NPC子Agent进行ReAct处理
+        self.add_thinking_step("协调", "正在分发事件到NPC子Agent...")
+
+        npc_responses = await self.event_coordinator.dispatch_to_npcs_with_registered(event_analysis)
+
+        # 3. 收集并汇总结果
+        coordinator_summary = self._generate_coordinator_summary(event_analysis, npc_responses)
+
+        return {
+            'fallback': False,
+            'event_analysis': event_analysis,
+            'npc_responses': npc_responses,
+            'coordinator_summary': coordinator_summary
+        }
+
+    def _update_coordinator_npc_status(self):
+        """更新Coordinator中的NPC状态信息"""
+        if not self.event_coordinator or not self.npc_system:
+            return
+
+        self.event_coordinator.update_npc_status(
+            npc_name=self.npc_system.config['name'],
+            location=self.npc_system.current_location,
+            status={
+                'current_activity': self.npc_system.current_activity.value if self.npc_system.current_activity else "空闲",
+                'emotion': self.npc_system.current_emotion.value,
+                'energy': self.npc_system.energy,  # 使用新字段 (0.0-1.0)
+                'fatigue': self.npc_system.need_system.needs.fatigue,
+                'hunger': self.npc_system.need_system.needs.hunger
+            }
+        )
+
+    def _generate_coordinator_summary(self, event_analysis: EventAnalysis, npc_responses: List[NPCEventResponse]) -> str:
+        """生成协调器的事件处理总结"""
+        summary_parts = []
+
+        # 事件总览
+        summary_parts.append(f"事件类型: {event_analysis.event_type}")
+        summary_parts.append(f"优先级: {event_analysis.priority.value}")
+
+        # NPC响应统计
+        responding_npcs = [r for r in npc_responses if r.responded]
+        summary_parts.append(f"响应NPC数: {len(responding_npcs)}/{len(npc_responses)}")
+
+        # 各NPC角色和行动
+        for response in npc_responses:
+            if response.responded:
+                actions_str = ", ".join(response.actions_taken) if response.actions_taken else "无具体行动"
+                summary_parts.append(f"  - {response.npc_name} ({response.role.value}): {actions_str}")
+
+        return "\n".join(summary_parts)
+
+    def _handle_react_event_result(self, result: dict):
+        """处理ReAct事件的结果并更新GUI"""
+        if result.get('fallback'):
+            # 使用传统模式的结果
+            traditional_result = result['result']
+            if traditional_result.get('should_respond') and traditional_result.get('response_text'):
+                self.add_dialogue_entry(
+                    self.npc_system.config["name"],
+                    traditional_result['response_text']
+                )
+            self.add_activity_log("事件处理", "使用传统模式处理完成")
+        else:
+            # ReAct模式结果
+            event_analysis = result.get('event_analysis')
+            npc_responses = result.get('npc_responses', [])
+            summary = result.get('coordinator_summary', '')
+
+            # 显示主Agent分析
+            self.add_thinking_step("总结", summary)
+
+            # 显示各NPC的对话响应
+            for response in npc_responses:
+                if response.responded and response.dialogue:
+                    self.add_dialogue_entry(response.npc_name, response.dialogue)
+
+                # 记录行动日志
+                if response.actions_taken:
+                    for action in response.actions_taken:
+                        self.add_activity_log(
+                            f"NPC行动 ({response.npc_name})",
+                            f"{response.role.value}: {action}"
+                        )
+
+            self.add_activity_log("事件处理", f"ReAct模式处理完成 - {len(npc_responses)}个NPC响应")
+
+        # 更新角色卡
+        self.update_character_card()
 
     def on_npc_changed(self, event):
         """NPC选择改变事件"""
@@ -842,21 +1645,9 @@ class NPCSimulatorGUI:
                 # 如果没有当前任务，显示活动状态
                 current_activity = current_activity_enum.value
             else:
-                # 从持久化状态获取
-                primary_state = self.npc_system.persistence.current_state.primary_state
-                activity_map = {
-                    "sleep": "睡觉",
-                    "rest": "休息",
-                    "work": "工作",
-                    "socialize": "社交",
-                    "eat": "吃饭",
-                    "observe": "观察",
-                    "pray": "祈祷",
-                    "learn": "学习",
-                    "create": "创造",
-                    "help_others": "帮助他人"
-                }
-                current_activity = activity_map.get(primary_state, f"{primary_state}中")
+                # 从持久化状态获取 - 使用新字段
+                current_activity_str = self.npc_system.persistence.current_state.current_activity
+                current_activity = current_activity_str if current_activity_str else "空闲"
 
             time_summary = f"经过 {hours} 小时 | 活动: {current_activity}"
 
@@ -883,7 +1674,7 @@ class NPCSimulatorGUI:
 
     def reset_world_clock(self):
         """重置世界时钟"""
-        from world_clock import reset_world_clock
+        from world_simulator.world_clock import reset_world_clock
         from datetime import datetime
 
         # 重置到默认时间
@@ -902,7 +1693,7 @@ class NPCSimulatorGUI:
         if not self.npc_system:
             return
 
-        from world_lore import ENVIRONMENTAL_EVENTS
+        from world_simulator.world_lore import ENVIRONMENTAL_EVENTS
 
         # 随机选择事件类型
         event_types = ["weather", "seasons", "town_events", "personal_events"]
@@ -966,7 +1757,8 @@ class NPCSimulatorGUI:
                 # 显示状态变化信息
                 if result['state_changed']:
                     status_summary = self.npc_system.persistence.get_full_state_summary()
-                    state_info = f"状态已改变为：{status_summary['current_state']['primary_state']}"
+                    current_activity = status_summary['current_state'].get('current_activity', '空闲')
+                    state_info = f"状态已改变为：{current_activity}"
                     if status_summary['current_state']['current_task']:
                         task = status_summary['current_state']['current_task']
                         state_info += f" | 当前任务：{task['description']}"
@@ -998,16 +1790,17 @@ class NPCSimulatorGUI:
         message_lower = message.lower()
         return any(keyword in message_lower for keyword in event_keywords)
 
-    def _get_reasoning_mode(self) -> ReasoningMode:
-        """获取当前选择的推理模式"""
+    def _get_reasoning_mode(self) -> int:
+        """获取当前选择的推理模式对应的最大推理步数"""
         mode_str = self.reasoning_mode_var.get() if hasattr(self, 'reasoning_mode_var') else "normal"
+        # 将推理模式映射为最大推理步数
         mode_map = {
-            "fast": ReasoningMode.FAST,
-            "normal": ReasoningMode.NORMAL,
-            "deep": ReasoningMode.DEEP,
-            "exhaustive": ReasoningMode.EXHAUSTIVE
+            "fast": 1,        # 快速：1步
+            "normal": 3,      # 正常：3步
+            "deep": 5,        # 深度：5步
+            "exhaustive": 10  # 详尽：10步
         }
-        return mode_map.get(mode_str, ReasoningMode.NORMAL)
+        return mode_map.get(mode_str, 3)
 
     def _handle_player_event(self, event_description: str):
         """处理玩家描述的事件 - 使用React Agent推理"""
@@ -1296,7 +2089,7 @@ class NPCSimulatorGUI:
 
         # 实时状态
         self.realtime_emotion_label.config(text=status['current_emotion'])
-        self.realtime_energy_label.config(text=f"{status['energy_level']}/100")
+        self.realtime_energy_label.config(text=f"{int(status['energy'] * 100)}/100")
 
         # 更新需求状态
         if hasattr(self.npc_system, 'need_system'):

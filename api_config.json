@@ -1,0 +1,6 @@
+{
+  "provider": "deepseek",
+  "api_key": "sk-a423c19ebde14f96aef4a3dcee0a52a9",
+  "api_base": "https://api.deepseek.com/v1",
+  "model": "deepseek-chat"
+}

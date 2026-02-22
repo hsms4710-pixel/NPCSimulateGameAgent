@@ -1,250 +1,174 @@
-# 🏰 艾伦谷 NPC 行为模拟器 (MRAG Enhanced Model)
+# NPC 行为模拟器 - MRAG Enhanced Model
 
-## 项目概述
+> 基于多层记忆检索增强生成（MRAG）的智能 NPC 行为系统，支持完整的事件驱动、经济系统、社交传播与前后端交互。
 
-这是一个基于 DeepSeek LLM 的智能 NPC 行为模拟系统，采用四级分层决策架构和 RAG 向量记忆系统，模拟中世纪奇幻小镇"艾伦谷"中的居民生活。系统实现了高效的 Token 消耗优化和 85% 的向量检索精度。
+---
 
-**项目状态**: ✅ 生产就绪 | **测试覆盖**: 100% (40/40) | **Python**: 3.13.9
+## 项目结构
 
-## 🌟 核心特性
+```
+MRAG_Enhanced_Model/
+├── backend/                    # 后端服务层
+│   ├── api_server.py           # FastAPI 主服务（仅保留 app + 中间件 + 路由注册）
+│   ├── npc_service.py          # NPC 服务封装
+│   ├── world_data.py           # 世界数据管理（含动态NPC/地点加载）
+│   ├── routes/                 # 路由模块（D1）
+│   │   ├── player_routes.py    # /api/v1/player/* 背包/工作/住宿/关系
+│   │   ├── event_routes.py     # /api/v1/events/* 统一事件触发/查询
+│   │   └── npc_routes.py       # /api/v1/npc/instantiate NPC实例化
+│   └── services/               # 服务层（D1）
+│       ├── economy_service.py  # EconomySystem 单例封装
+│       └── event_service.py    # 完整事件链路封装
+├── core_types/                 # 统一数据类型定义
+│   ├── npc_types.py            # UnifiedNPCState（含经济/关系/住宿/任务字段）
+│   ├── event_types.py          # UnifiedEvent（含child_event_ids/npc_directives等）
+│   ├── memory_types.py         # 记忆/目标/关系类型
+│   └── enums.py                # 枚举与常量
+├── npc_core/                   # NPC 行为系统核心
+│   ├── npc_base.py             # 基础设施集成
+│   ├── npc_events.py           # 事件处理（含_update_relationship关系系统）
+│   ├── npc_dialogue.py         # 对话与记忆
+│   ├── npc_autonomous.py       # 自主行为循环
+│   ├── npc_registry.py         # NPC 注册表
+│   └── npc_persistence.py      # 数据持久化
+├── npc_optimization/           # 优化模块
+│   ├── event_coordinator.py    # 事件协调与角色分配
+│   ├── event_progression.py    # 事件推进系统（含_settle_event_tree）
+│   ├── world_event_manager.py  # 空间广播 + 八卦自动传播调度器
+│   ├── unified_tools.py        # 统一工具集（含trade_item交易工具）
+│   ├── four_level_decisions.py # 四级决策系统
+│   ├── memory_layers.py        # 三层记忆管理
+│   └── rag_memory.py           # RAG 记忆检索
+├── world_simulator/            # 世界模拟器
+│   ├── world_manager.py        # 世界管理器（工作/住宿接入经济）
+│   ├── economy_system.py       # 经济系统（货币/背包/市场）
+│   ├── player_system.py        # 玩家角色系统
+│   ├── quest_system.py         # 任务系统
+│   └── event_system.py         # 事件触发系统
+├── frontend/                   # 前端界面
+│   ├── index.html              # 主页面（含背包面板/事件树面板）
+│   ├── css/style.css           # 样式（含背包格/事件进度条/关系颜色条）
+│   └── js/
+│       ├── api.js              # API 客户端（含16个新方法）
+│       ├── game.js             # 游戏逻辑（含渲染/刷新/WebSocket处理）
+│       └── map.js              # 地图模块
+├── npc_storage/                # NPC 持久化数据
+├── saves/                      # 游戏存档
+├── tests/                      # 测试
+├── run.py                      # 启动入口
+├── requirements.txt
+└── start_demo.bat              # Windows 快速启动
+```
 
-### 🤖 四级分层决策系统
-- **L1 生物锁** (0 Token): 硬规则决策 - 检查疲劳/饥饿/睡眠状态
-- **L2 快速过滤** (50 Token): 使用 MiniLM 判断事件重要性
-- **L3 战略规划** (200 Token): 生成行动蓝图
-- **L4 深度推理** (300+ Token): ReAct + Tree of Thoughts 多路径推理
+---
 
-**优化成果**: Token 消耗 700T → 467T (-33%) | 日常行为成本降低 99%
+## 核心架构
 
-### 💾 三层记忆 + RAG 向量检索
-- **热记忆**: 最近 24H 事件（快速访问）
-- **温记忆**: 一周内事件（精选摘要）
-- **冷记忆**: 长期事件（FAISS 向量存储）
+### 数据绑定原则
+- NPC 相关数据挂在 `UnifiedNPCState` 实体上（金币、背包、关系、任务等）
+- 事件数据用 `UnifiedEvent` 传递（子事件链、感知NPC、经济数据等）
+- 不使用游离全局变量
 
-**检索指标**: 精度 85% | 查询速度 1-2ms | 支持 500MB+ 记忆库
+### 四级决策系统
+```
+L1: 生物钟硬判决 (0 tokens)    — 遵循日程
+L2: 快速重要性过滤 (50 tokens) — 是否忽视事件
+L3: 战略规划 (200 tokens)      — 制定行动计划
+L4: 深度推理 (500+ tokens)     — 树搜索复杂推理
+```
 
-### 🎮 完整的交互系统
-- 基于 Tkinter 的 GUI 界面
-- 实时 NPC 状态监控
-- 自然语言对话系统
-- 世界事件动态生成
+### 事件驱动流程（以教堂火灾为例）
+```
+POST /api/v1/events/trigger {type:"disaster", content:"教堂起火", location:"圣光教堂"}
+  → event_service.trigger_event()
+  → UnifiedEvent 创建 + EventProgressionSystem 注册
+  → WorldEventManager.broadcast_spatial_event() 空间广播
+  → event.aware_npcs 记录感知NPC
+  → EventCoordinator 分析 + 角色分配 → event.npc_directives
+  → NPC.process_event() → _execute_decision() → move_to() + 子任务创建
+  → EventProgressionSystem.tick() 阶段推进（8阶段）
+  → 子事件生成 → child_event_ids 写回父事件
+  → phase=resolved → _settle_event_tree() 递归结算
+  → 关系更新 + 记忆写入 + WebSocket 推送
+```
 
-## 🚀 快速开始
+---
 
-### 环境要求
-- Python 3.8+ (建议 3.13+)
-- 虚拟环境 (推荐使用 venv)
+## API 端点
 
-### 安装与运行
+### 事件系统
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/v1/events/trigger` | 统一事件触发入口 |
+| GET  | `/api/v1/events/active` | 活跃事件列表（含子事件树） |
+| GET  | `/api/v1/events/{id}` | 单事件详情 |
+| GET  | `/api/v1/events/{id}/tree` | 事件因果树 |
+| POST | `/api/v1/events/{id}/settle` | 手动结算事件树 |
+
+### 玩家系统
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET  | `/api/v1/player/inventory` | 背包查询 |
+| POST | `/api/v1/player/inventory/use` | 使用物品 |
+| POST | `/api/v1/player/trade` | 与NPC交易 |
+| GET  | `/api/v1/player/gold` | 金币余额 |
+| POST | `/api/v1/player/work` | 打工（经济结算） |
+| POST | `/api/v1/player/rest` | 住宿（经济结算） |
+| GET  | `/api/v1/player/relationships` | 关系列表 |
+
+### NPC系统
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/v1/npc/instantiate` | 实例化临时NPC |
+| DELETE | `/api/v1/npc/{name}` | 移除临时NPC |
+| GET  | `/api/v1/npc/{name}/relationships` | NPC关系查询 |
+
+### WebSocket 推送消息类型
+| 类型 | 触发时机 |
+|------|---------|
+| `event_phase_change` | 事件阶段变化 → 前端更新进度条 |
+| `npc_moved` | NPC位置变化 → 地图气泡移动 |
+| `gossip_spread` | 八卦传播跳转 |
+| `trade_completed` | 交易完成 → 刷新背包 |
+| `relationship_changed` | 关系变化 → 刷新关系面板 |
+| `task_completed` | 任务完成 → 奖励弹窗 |
+
+---
+
+## 快速启动
 
 ```bash
-# 1. 克隆项目
-git clone <repository-url>
-cd MRAG_Enhanced_Model
-
-# 2. 创建虚拟环境 (可选但推荐)
-python -m venv venv
-source venv/Scripts/activate  # Windows
-# 或 source venv/bin/activate  # Linux/Mac
-
-# 3. 安装依赖
+# 安装依赖
 pip install -r requirements.txt
 
-# 4. 配置 API 密钥
-cp env.example .env
-# 编辑 .env，设置 DEEPSEEK_API_KEY
+# 启动服务
+python run.py
 
-# 5. 运行测试 (验证环境)
-python test_suite.py
-
-# 6. 启动模拟器
-python run_simulator.py
+# 或 Windows 双击
+start_demo.bat
 ```
 
-### 关键依赖
-- `faiss-cpu` 1.13.2 - 向量相似度搜索
-- `sentence-transformers` 5.2.0 - 语义嵌入
-- `numpy` 2.4.1 - 数值计算
-- `requests` 2.32.5 - HTTP 调用
+服务启动后访问：`http://localhost:8000`
 
-## 🎯 使用指南
-
-### 界面说明
-
-- **控制面板**: 选择NPC、控制时间、触发事件
-- **NPC状态面板**: 显示当前NPC的详细信息
-- **活动日志**: 记录NPC的行为和系统事件
-- **对话面板**: 与NPC进行文字对话
-
-### 基本操作
-
-1. **选择NPC**: 使用下拉菜单选择不同的NPC角色
-2. **时间控制**:
-   - 点击"前进1小时"或"前进30分钟"来推进时间
-   - 勾选"自动前进"让时间自动流逝
-3. **触发事件**: 点击"触发事件"来生成随机世界事件
-4. **对话**: 在对话框输入文字与NPC交流
-
-### NPC角色介绍
-
-#### 🛠️ 埃尔德·铁锤 (铁匠)
-- **背景**: 矮人铁匠，失去家园后定居艾伦谷
-- **性格**: 坚韧、耐心、固执
-- **目标**: 培养继承人，守护铁匠传统
-- **日常**: 早上6点到晚上7点在铁匠铺工作
-
-#### 🍺 贝拉·欢笑 (酒馆老板)
-- **背景**: 乐观的酒馆老板，经历过人生挫折
-- **性格**: 开朗、热情、八卦
-- **目标**: 让酒馆成为镇民心灵港湾
-- **日常**: 早上8点到深夜12点营业
-
-#### ⛪ 西奥多·光明 (牧师)
-- **背景**: 博学的神职人员，守护小镇秘密
-- **性格**: 智慧、慈祥、神秘
-- **目标**: 维护小镇和平，探索古老传说
-- **日常**: 早上8点到下午4点在教堂工作
-
-## 🏗️ 技术架构
-
-### 核心组件
-
-```
-艾伦谷模拟器/
-├── world_lore.py        # 世界观和NPC设定
-├── deepseek_client.py   # DeepSeek API客户端
-├── npc_system.py        # NPC行为系统
-├── gui_interface.py     # GUI界面
-├── main.py             # 主程序入口
-└── run_simulator.py    # 启动脚本
-```
-
-### NPC行为系统
-
-每个NPC都包含：
-- **人格系统**: 性格特征、情绪状态、价值观
-- **目标系统**: 短期目标、长期目标、进度跟踪
-- **记忆系统**: 事件记忆、情感影响、重要性排序
-- **关系网络**: 与其他NPC的互动关系
-- **时间感知**: 日常作息、季节变化感知
-
-### AI决策流程
-
-1. **观察阶段**: 感知当前环境状态
-2. **思考阶段**: 基于人格和记忆进行推理
-3. **决策阶段**: 选择合适的行动方案
-4. **执行阶段**: 执行行动并更新状态
-5. **学习阶段**: 从结果中学习和调整
-
-## 🎨 世界观设计
-
-### 艾伦谷背景
-
-艾伦谷是一个宁静的中世纪小镇，位于古老的艾伦森林边缘。镇上居民以农业、手工艺和贸易为生。这里曾是魔法学院的所在地，但在一场灾难后只留下魔法残余。
-
-### 社会结构
-
-- **铁匠铺**: 武器装备制造中心
-- **教堂**: 宗教和医疗服务中心
-- **酒馆**: 社交和娱乐场所
-- **农田**: 食物生产区
-- **森林**: 采集和冒险区域
-
-### 时间系统
-
-- **一天24小时**: 从早上6点到次日凌晨6点
-- **季节循环**: 春夏秋冬，每个季节影响居民行为
-- **特殊事件**: 节日、市场日、危机事件等
-
-## 🔧 自定义和扩展
-
-### 添加新NPC
-
-在`world_lore.py`中的`NPC_TEMPLATES`字典添加新角色：
-
-```python
-"new_character": {
-    "name": "新角色名称",
-    "race": "种族",
-    "profession": "职业",
-    "age": 25,
-    "gender": "male/female",
-    "personality": {
-        "traits": ["性格特征"],
-        "temperament": "性格类型",
-        "moral_alignment": "道德倾向"
-    },
-    "background": "背景故事...",
-    "goals": {"short_term": [...], "long_term": [...]},
-    "daily_schedule": {...},
-    "skills": {...}
-}
-```
-
-### 修改世界事件
-
-在`world_lore.py`的`ENVIRONMENTAL_EVENTS`中添加新事件类型。
-
-### 自定义AI提示
-
-修改`deepseek_client.py`中的系统提示来调整NPC的回应风格。
-
-## 📝 日志和调试
-
-程序会生成`npc_simulator.log`文件，包含详细的运行日志。可以通过查看日志来调试NPC行为和API调用。
+API 文档：`http://localhost:8000/docs`
 
 ---
 
-## 🏗️ 项目架构
+## 主要特性
 
-### 核心组件
-
-| 组件 | 文件 | 功能 |
-|------|------|------|
-| **NPC 系统** | `npc_system.py` | NPC 主类和行为循环 |
-| **决策引擎** | `npc_optimization/four_level_decisions.py` | 四级分层决策 |
-| **行为规则** | `npc_optimization/behavior_decision_tree.py` | 日常行为规则树 |
-| **记忆管理** | `npc_optimization/memory_manager.py` | 三层记忆系统 |
-| **RAG 系统** | `npc_optimization/rag_memory.py` | FAISS 向量检索 |
-| **ReAct 工具** | `npc_optimization/react_tools.py` | NPC 工具集 |
-| **GUI 界面** | `gui_interface.py` | Tkinter 交互界面 |
-
-## 🧪 测试与验证
-
-```bash
-python test_suite.py  # 运行完整测试 (40 个)
-```
-
-**测试覆盖**: ✅ 100% 通过 (40/40)
-
-## 📚 开发文档
-
-详见 `.github/copilot-instructions.md` 获取开发指南。
-
-## 📊 性能指标
-
-- Token 消耗: 700T → 467T (-33%)
-- 向量精度: 35% → 85% (+50%)
-- 查询速度: 1-2ms (5-10x 提升)
-- 测试通过: 100% (40/40)
-
-## 📄 许可证
-
-MIT License
-
-## 🎯 未来计划
-
-- [ ] 多NPC同时模拟
-- [ ] 图形化地图显示
-- [ ] 物品和经济系统
-- [ ] 任务和剧情系统
-- [ ] 多模态输入支持
-- [ ] 高级RAG记忆系统
-
-## 📄 许可证
-
-本项目仅用于教育和研究目的。
+- **事件驱动**：所有行为变化（移动、交易、救援）均由 `UnifiedEvent` 驱动，经 `EventCoordinator` 分发
+- **八卦自动传播**：`WorldEventManager` 后台线程每 tick 自动传一跳，模拟真实社交扩散
+- **经济系统**：货币转账、背包管理、市场定价，NPC/玩家状态实时同步
+- **关系系统**：动态阈值分级（enemy/stranger/friend/close_friend），对话/交易/事件均触发更新
+- **子事件树**：父事件 resolved 后递归结算所有子事件，奖励自动分发
+- **NPC实例化**：未知实体在交互触发时动态实例化为完整 Agent
+- **动态分类**：位置、事件类型等从数据文件读取，不写死枚举或 if-else
 
 ---
 
-**享受探索艾伦谷居民的生活吧！** 🏰✨
+## 技术栈
+
+- **后端**：Python 3.10+, FastAPI, asyncio, WebSocket
+- **LLM**：DeepSeek API（支持替换其他兼容接口）
+- **前端**：原生 HTML/CSS/JS，无框架依赖
+- **存储**：JSON + gzip 本地持久化

@@ -11,9 +11,18 @@ numpy>=1.26.0  # For numerical operations (compatible with Python 3.13)
 faiss-cpu>=1.8.0  # Vector similarity search (CPU version, use faiss-gpu for CUDA)
 sentence-transformers>=2.7.0  # Semantic embeddings
 
+# Chinese text processing
+jieba>=0.42.1  # Chinese word segmentation
+
 # Enhanced logging and console output
 rich==13.7.0
 loguru==0.7.2
+
+# Web API Server (FastAPI)
+fastapi>=0.109.0  # Modern web framework
+uvicorn>=0.27.0  # ASGI server
+websockets>=12.0  # WebSocket support
+pydantic>=2.0.0  # Data validation
 
 # Testing (optional)
 pytest==7.4.3

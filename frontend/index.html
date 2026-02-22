@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="description" content="NPC Behavior Simulation - AI-powered fantasy town simulation">
+    <title data-i18n="app.game.title">艾伦谷世界模拟器</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+</head>
+<body>
+    <!-- 启动界面 -->
+    <div id="start-screen" class="screen active">
+        <div class="start-container">
+            <!-- 语言切换 -->
+            <div class="lang-switcher" style="position: absolute; top: 20px; right: 20px;">
+                <button class="lang-btn active" data-lang="zh-CN">中文</button>
+                <button class="lang-btn" data-lang="en-US">EN</button>
+            </div>
+            <h1 class="game-title" data-i18n="app.game.title">世界模拟器</h1>
+            <p class="game-subtitle" data-i18n="app.subtitle">探索一个由AI驱动的奇幻世界</p>
+            <div class="start-buttons">
+                <button id="btn-new-game" class="btn btn-primary btn-large" data-i18n="start.newGame">创建新世界</button>
+                <button id="btn-load-world" class="btn btn-secondary btn-large" data-i18n="start.loadWorld">加载存档</button>
+            </div>
+            <div class="start-footer">
+                <button id="btn-settings-start" class="btn btn-text" data-i18n="start.settings">API设置</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 世界创建界面 -->
+    <div id="world-create-screen" class="screen">
+        <div class="world-create-container">
+            <h2 data-i18n="world.create.title">创建你的世界</h2>
+
+            <!-- 世界主题选择 -->
+            <div class="theme-section">
+                <h3 data-i18n="world.theme.title">选择世界主题</h3>
+                <div class="theme-cards" id="theme-cards">
+                    <div class="theme-card selected" data-theme="medieval_fantasy">
+                        <div class="theme-icon">🏰</div>
+                        <div class="theme-name">中世纪奇幻</div>
+                        <div class="theme-desc">魔法与骑士的世界</div>
+                    </div>
+                    <div class="theme-card" data-theme="eastern_martial">
+                        <div class="theme-icon">⚔️</div>
+                        <div class="theme-name">东方武侠</div>
+                        <div class="theme-desc">江湖与武林的世界</div>
+                    </div>
+                    <div class="theme-card" data-theme="steampunk">
+                        <div class="theme-icon">⚙️</div>
+                        <div class="theme-name">蒸汽朋克</div>
+                        <div class="theme-desc">蒸汽与齿轮的世界</div>
+                    </div>
+                    <div class="theme-card" data-theme="post_apocalyptic">
+                        <div class="theme-icon">☢️</div>
+                        <div class="theme-name">末世废土</div>
+                        <div class="theme-desc">废墟与生存的世界</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 世界描述 -->
+            <div class="world-desc-section">
+                <h3 data-i18n="world.desc.title">描述你的世界</h3>
+                <textarea id="world-description"
+                    placeholder="描述你想要创建的世界，例如：一个被古老魔法笼罩的神秘山谷小镇，居民们守护着一颗沉睡的龙蛋..."
+                    rows="4"></textarea>
+            </div>
+
+            <!-- NPC数量 -->
+            <div class="npc-count-section">
+                <h3 data-i18n="world.npc.title">初始NPC数量</h3>
+                <div class="npc-slider">
+                    <input type="range" id="npc-count" min="3" max="10" value="5">
+                    <span id="npc-count-display">5</span> 个NPC
+                </div>
+            </div>
+
+            <!-- 生成状态 -->
+            <div class="generation-status" id="generation-status" style="display: none;">
+                <div class="spinner"></div>
+                <span id="generation-message">正在使用AI生成世界...</span>
+            </div>
+
+            <div class="world-create-buttons">
+                <button id="btn-back-start" class="btn btn-secondary">返回</button>
+                <button id="btn-generate-world" class="btn btn-primary">生成世界</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 世界加载界面 -->
+    <div id="world-load-screen" class="screen">
+        <div class="world-load-container">
+            <h2 data-i18n="world.load.title">加载存档</h2>
+            <div class="saved-worlds-list" id="saved-worlds-list">
+                <p class="no-data">正在加载存档列表...</p>
+            </div>
+            <div class="world-load-buttons">
+                <button id="btn-back-start-load" class="btn btn-secondary">返回</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 角色创建界面 -->
+    <div id="character-screen" class="screen">
+        <div class="character-container">
+            <h2 data-i18n="character.title">创建你的角色</h2>
+            <div class="preset-section">
+                <h3 data-i18n="character.presetSection">选择预设角色</h3>
+                <div class="preset-cards" id="preset-cards">
+                    <div class="preset-card selected" data-preset="adventurer">
+                        <div class="preset-icon">⚔️</div>
+                        <div class="preset-name" data-i18n="preset.adventurer">冒险者</div>
+                        <div class="preset-desc" data-i18n="preset.adventurer.desc">寻求刺激的勇士</div>
+                    </div>
+                    <div class="preset-card" data-preset="traveler">
+                        <div class="preset-icon">🚶</div>
+                        <div class="preset-name" data-i18n="preset.traveler">旅行者</div>
+                        <div class="preset-desc" data-i18n="preset.traveler.desc">四处漂泊的旅人</div>
+                    </div>
+                    <div class="preset-card" data-preset="merchant">
+                        <div class="preset-icon">💰</div>
+                        <div class="preset-name" data-i18n="preset.merchant">商人</div>
+                        <div class="preset-desc" data-i18n="preset.merchant.desc">精明的生意人</div>
+                    </div>
+                    <div class="preset-card" data-preset="scholar">
+                        <div class="preset-icon">📚</div>
+                        <div class="preset-name" data-i18n="preset.scholar">学者</div>
+                        <div class="preset-desc" data-i18n="preset.scholar.desc">追求知识的智者</div>
+                    </div>
+                </div>
+            </div>
+            <div class="custom-section">
+                <h3 data-i18n="character.customSection">自定义属性</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="char-name" data-i18n="player.name">姓名</label>
+                        <input type="text" id="char-name" data-i18n-placeholder="player.name.placeholder" placeholder="输入角色名称" value="艾瑞克">
+                    </div>
+                    <div class="form-group">
+                        <label for="char-age" data-i18n="player.age">年龄</label>
+                        <input type="number" id="char-age" min="16" max="80" value="28">
+                    </div>
+                    <div class="form-group">
+                        <label for="char-gender" data-i18n="player.gender">性别</label>
+                        <select id="char-gender">
+                            <option value="男" data-i18n="player.gender.male">男</option>
+                            <option value="女" data-i18n="player.gender.female">女</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group char-background-group">
+                    <label for="char-background" data-i18n="player.background">角色背景故事</label>
+                    <textarea id="char-background" placeholder="描述你的角色背景，例如：一名来自远方的神秘旅者，身负特殊使命..." rows="3"></textarea>
+                </div>
+            </div>
+            <div class="character-buttons">
+                <button id="btn-back-start" class="btn btn-secondary" data-i18n="character.back">返回</button>
+                <button id="btn-enter-world" class="btn btn-primary" data-i18n="character.enter">进入世界</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主游戏界面 -->
+    <div id="game-screen" class="screen">
+        <header class="game-header">
+            <div class="header-left">
+                <div class="time-display">
+                    <span class="time-icon" id="time-icon">☀️</span>
+                    <span id="game-time">第1天 08:00</span>
+                </div>
+                <div class="time-controls">
+                    <button id="btn-pause" class="btn btn-small" data-i18n-title="time.pause" title="暂停">⏸️</button>
+                    <button id="btn-advance-1h" class="btn btn-small" title="+1h">+1h</button>
+                    <button id="btn-advance-6h" class="btn btn-small" title="+6h">+6h</button>
+                </div>
+            </div>
+            <div class="header-center">
+                <span id="current-location-header">村庄大门</span>
+            </div>
+            <div class="header-right">
+                <div class="lang-switcher">
+                    <button class="lang-btn active" data-lang="zh-CN">中</button>
+                    <button class="lang-btn" data-lang="en-US">EN</button>
+                </div>
+                <button id="btn-log" class="btn btn-small" data-i18n-title="log.title" title="日志">📋</button>
+                <button id="btn-api-config" class="btn btn-small" data-i18n-title="settings.title" title="API配置">⚙️</button>
+                <button id="btn-exit-game" class="btn btn-small" data-i18n-title="common.exit" title="退出">🚪</button>
+            </div>
+        </header>
+
+        <main class="game-main">
+            <!-- 左侧：玩家状态 -->
+            <aside class="player-panel">
+                <div class="panel-header">
+                    <h3 id="player-name">玩家</h3>
+                    <span id="player-profession" class="player-profession">冒险者</span>
+                </div>
+                <div class="player-stats">
+                    <div class="stat-item">
+                        <span class="stat-label" data-i18n="player.location">位置</span>
+                        <span class="stat-value" id="player-location">村庄大门</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label" data-i18n="player.gold">金币</span>
+                        <span class="stat-value" id="player-gold">100</span>
+                    </div>
+                    <div class="stat-bar">
+                        <span class="stat-label" data-i18n="player.hunger">饱腹</span>
+                        <div class="bar-container"><div class="bar hunger-bar" id="hunger-bar" style="width: 100%"></div></div>
+                    </div>
+                    <div class="stat-bar">
+                        <span class="stat-label" data-i18n="player.energy">精力</span>
+                        <div class="bar-container"><div class="bar energy-bar" id="energy-bar" style="width: 100%"></div></div>
+                    </div>
+                    <div class="stat-bar">
+                        <span class="stat-label" data-i18n="player.social">社交</span>
+                        <div class="bar-container"><div class="bar social-bar" id="social-bar" style="width: 50%"></div></div>
+                    </div>
+                </div>
+                <div class="action-panel">
+                    <h4 data-i18n="action.title">可执行行动</h4>
+                    <div class="action-buttons">
+                        <button class="action-btn action-move" data-action="move" id="btn-move">
+                            <span class="action-icon">🗺️</span><span class="action-name" data-i18n="action.move">移动</span>
+                        </button>
+                        <button class="action-btn" data-action="socialize" id="btn-socialize">
+                            <span class="action-icon">💬</span><span class="action-name" data-i18n="action.socialize">社交</span>
+                        </button>
+                        <button class="action-btn" data-action="eat" id="btn-eat">
+                            <span class="action-icon">🍽️</span><span class="action-name" data-i18n="action.eat">用餐</span>
+                        </button>
+                        <button class="action-btn" data-action="work" id="btn-work">
+                            <span class="action-icon">⚒️</span><span class="action-name" data-i18n="action.work">工作</span>
+                        </button>
+                        <button class="action-btn" data-action="rest" id="btn-rest">
+                            <span class="action-icon">💤</span><span class="action-name" data-i18n="action.rest">休息</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="relationships-panel">
+                    <h4 data-i18n="relationship.title">人际关系</h4>
+                    <div id="relationships-list" class="relationships-list">
+                        <!-- 关系列表（D3.3 扩展）-->
+                        <p class="no-data" data-i18n="relationship.empty">暂无建立的关系</p>
+                    </div>
+                </div>
+
+                <!-- 背包面板（D3.1）-->
+                <div class="inventory-panel" id="inventory-panel">
+                  <div class="panel-header">
+                    <span data-i18n="player.inventory">背包</span>
+                    <span class="gold-display" id="player-gold-display">💰 0</span>
+                  </div>
+                  <div class="inventory-grid" id="inventory-grid">
+                    <!-- 20格物品网格，由JS动态填充 -->
+                  </div>
+                </div>
+            </aside>
+
+            <!-- 中间：地图和事件 -->
+            <section class="center-panel">
+                <!-- 可视化地图面板 -->
+                <div class="visual-map-panel">
+                    <div class="panel-header">
+                        <h4 data-i18n="map.title">艾伦谷地图</h4>
+                        <div class="map-controls">
+                            <button id="btn-toggle-map" class="btn btn-small" data-i18n="nav.map" title="展开/收起地图">地图</button>
+                        </div>
+                    </div>
+                    <div class="map-canvas-container" id="map-canvas-container">
+                        <canvas id="world-map-canvas"></canvas>
+                    </div>
+                </div>
+
+                <div class="event-panel">
+                    <h4 data-i18n="event.title">世界事件触发</h4>
+                    <div class="event-input-group">
+                        <input type="text" id="event-input" data-i18n-placeholder="event.placeholder" placeholder="输入事件，如：小偷闯入铁匠铺">
+                        <select id="event-location">
+                            <option value="" data-i18n="event.location.current">当前位置</option>
+                            <option value="铁匠铺" data-i18n="location.smithy">铁匠铺</option>
+                            <option value="酒馆" data-i18n="location.tavern">酒馆</option>
+                            <option value="教堂" data-i18n="location.church">教堂</option>
+                            <option value="市场区" data-i18n="location.market">市场区</option>
+                            <option value="镇中心" data-i18n="location.center">镇中心</option>
+                            <option value="工坊区" data-i18n="location.workshop">工坊区</option>
+                            <option value="农田" data-i18n="location.farm">农田</option>
+                            <option value="村庄大门" data-i18n="location.gate">村庄大门</option>
+                            <option value="森林边缘" data-i18n="location.forest">森林边缘</option>
+                        </select>
+                        <button id="btn-trigger-event" class="btn btn-primary" data-i18n="event.trigger">触发</button>
+                    </div>
+                    <div class="active-events" id="active-events"></div>
+
+                <!-- 事件树面板（D3.2）-->
+                <div class="event-tree-panel" id="event-tree-panel">
+                  <div class="panel-header" data-i18n="events.active">活跃事件</div>
+                  <div id="event-tree-list"></div>
+                </div>
+                </div>
+                <div class="interaction-panel">
+                    <h4 data-i18n="dialogue.title">交互区</h4>
+                    <div class="dialogue-box" id="dialogue-box">
+                        <div class="dialogue-content" id="dialogue-content">
+                            <p class="system-message" data-i18n="dialogue.welcome">欢迎来到艾伦谷！你站在村庄大门前，清晨的阳光洒在古老的石板路上。</p>
+                        </div>
+                    </div>
+                    <div class="dialogue-input-group">
+                        <input type="text" id="dialogue-input" data-i18n-placeholder="dialogue.placeholder" placeholder="输入你想说的话..." disabled>
+                        <button id="btn-send-dialogue" class="btn btn-primary" disabled data-i18n="dialogue.send">发送</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 右侧：NPC状态 -->
+            <aside class="npc-panel">
+                <div class="panel-header"><h3 data-i18n="npc.title">当前区域NPC</h3></div>
+                <div class="npc-list" id="npc-list">
+                    <p class="no-data" data-i18n="npc.empty">当前区域没有NPC</p>
+                </div>
+                <div class="npc-response-panel">
+                    <h4><span data-i18n="npc.response.title">NPC反应</span> <span class="llm-badge" id="llm-status">LLM</span></h4>
+                    <div class="npc-response-box" id="npc-response-box">
+                        <p class="no-data" data-i18n="npc.response.empty">暂无NPC反应</p>
+                    </div>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <!-- 设置模态框 -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 data-i18n="settings.title">API 配置</h3>
+                <button class="modal-close" onclick="closeModal('settings-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label data-i18n="settings.provider">API 提供商</label>
+                    <select id="api-provider"><option value="deepseek">DeepSeek</option><option value="openai">OpenAI</option></select>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="settings.apiKey">API Key</label>
+                    <input type="password" id="api-key" data-i18n-placeholder="settings.apiKey.placeholder" placeholder="输入你的 API Key">
+                </div>
+                <div class="form-group">
+                    <label data-i18n="settings.model">模型</label>
+                    <input type="text" id="api-model" value="deepseek-chat">
+                </div>
+                <div class="api-status" id="api-status"></div>
+            </div>
+            <div class="modal-footer">
+                <button id="btn-test-api" class="btn btn-secondary" data-i18n="settings.test">测试连接</button>
+                <button id="btn-save-api" class="btn btn-primary" data-i18n="settings.save">保存配置</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 日志模态框 -->
+    <div id="log-modal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 data-i18n="log.title">事件日志</h3>
+                <button class="modal-close" onclick="closeModal('log-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="log-container" id="log-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 地图模态框 -->
+    <div id="map-modal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3 data-i18n="map.title">世界地图</h3>
+                <button class="modal-close" onclick="closeModal('map-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="map-hint-text" data-i18n="map.hint">点击选择目的地</p>
+                <div class="map-grid-modal" id="map-grid-modal">
+                    <!-- 地点将由JavaScript动态生成 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 社交选择模态框 -->
+    <div id="social-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 data-i18n="social.title">选择交谈对象</h3>
+                <button class="modal-close" onclick="closeModal('social-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="social-npc-list" class="social-npc-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/i18n.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/map.js"></script>
+    <script src="js/game.js"></script>
+</body>
+</html>

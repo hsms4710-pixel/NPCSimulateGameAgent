@@ -272,7 +272,7 @@ class NPCToolRegistry:
         - 工具调用前会检查当前是否有高优先级任务，如果有则允许切换
         - 睡眠时只能被优先级 >= 95 的任务唤醒（生死关头）
         """
-        from constants import NPCAction, ACTIVITY_PRIORITY_SLEEP, ACTIVITY_PRIORITY_CRITICAL
+        from core_types import NPCAction, ACTIVITY_PRIORITY_SLEEP, ACTIVITY_PRIORITY_CRITICAL
         
         activity_map = {
             "工作": NPCAction.WORK,
@@ -319,7 +319,7 @@ class NPCToolRegistry:
                 }
                 routine_action = self.npc_system.behavior_tree.decide_routine_behavior(
                     current_hour=current_hour,
-                    energy_level=self.npc_system.energy_level,
+                    energy_level=int(self.npc_system.energy * 100),  # 转换为0-100范围
                     needs=needs_dict,
                     current_task={"priority": current_task.priority, "description": current_task.description}
                 )
@@ -341,7 +341,7 @@ class NPCToolRegistry:
     
     def _update_emotion(self, emotion: str, intensity: int = 5):
         """更新情绪"""
-        from constants import Emotion
+        from core_types import Emotion
         emotion_map = {
             "平静": Emotion.CALM,
             "高兴": Emotion.HAPPY,

@@ -1,6 +1,11 @@
 """
 异步消息总线与社交系统
 支持NPC间的信息扩散与空间感知
+
+注意：SpatialMessage 和 GossipMessage 是特化的消息类型，
+与 core_types.event_types.Event 有不同的功能。
+- SpatialMessage: 用于空间范围内的事件感知
+- GossipMessage: 用于社交网络中的信息传播，有传播链追踪
 """
 
 import uuid
@@ -9,20 +14,14 @@ import threading
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta
-from enum import Enum
 from queue import Queue, PriorityQueue
 import heapq
 
+# 从统一类型模块导入
+from core_types import MessageType
+from core_types.event_types import Event
+
 logger = logging.getLogger(__name__)
-
-
-class MessageType(Enum):
-    """消息类型"""
-    SPATIAL_EVENT = "spatial_event"  # 空间事件（有范围衰减）
-    GOSSIP = "gossip"  # 八卦（通过社交传播）
-    EMERGENCY = "emergency"  # 紧急事件（无范围限制）
-    OBSERVATION = "observation"  # 观察到的事件
-    SOCIAL_UPDATE = "social_update"  # 社交关系更新
 
 
 @dataclass
@@ -341,19 +340,59 @@ class WorldEventManager:
         
         logger.warning(f"紧急警报: {source_npc} - {alert_content}")
 
+    def _get_nearby_npcs(self, npc_name: str, radius: float = 50.0) -> List[str]:
+        """获取指定NPC附近的NPC列表"""
+        with self.lock:
+            my_pos = self.npc_positions.get(npc_name)
+            if not my_pos:
+                return []
+            nearby = []
+            for other_name, pos in self.npc_positions.items():
+                if other_name == npc_name:
+                    continue
+                dx = pos[0] - my_pos[0]
+                dy = pos[1] - my_pos[1]
+                dist = (dx ** 2 + dy ** 2) ** 0.5
+                if dist <= radius:
+                    nearby.append(other_name)
+            return nearby
+
+    def _gossip_propagation_tick(self):
+        """每个清理周期自动传播一跳八卦，模拟真实社交扩散速度"""
+        with self.lock:
+            for npc_name, gossips in list(self.gossip_messages.items()):
+                for gossip in gossips:
+                    if not gossip.can_relay():
+                        continue
+                    nearby = self._get_nearby_npcs(npc_name, radius=50)
+                    for target in nearby:
+                        if target not in gossip.told_to_npcs:
+                            # relay_gossip 内部也加锁，需先释放外部锁避免死锁
+                            # 这里直接构造新消息以避免重入
+                            new_gossip = gossip.relay_to(target)
+                            gossip.told_to_npcs.append(target)
+                            if target not in self.gossip_messages:
+                                self.gossip_messages[target] = []
+                            self.gossip_messages[target].append(new_gossip)
+                            logger.debug(f"八卦自动传播: {npc_name} -> {target}: {gossip.content[:30]}")
+                            break  # 每tick只传一跳
+
     def _cleanup_worker(self):
-        """后台清理过期消息"""
+        """后台清理过期消息（兼含八卦自动传播）"""
         while self.running:
             try:
                 threading.Event().wait(60)  # 每分钟清理一次
-                
+
+                # B4：八卦自动传播（每tick传一跳）
+                self._gossip_propagation_tick()
+
                 with self.lock:
                     # 清理过期的空间消息
                     self.spatial_messages = [
                         msg for msg in self.spatial_messages
                         if not msg.is_expired()
                     ]
-                    
+
                     # 清理过期的八卦
                     cutoff_time = datetime.now() - timedelta(days=7)
                     for npc_name in self.gossip_messages:
@@ -361,9 +400,9 @@ class WorldEventManager:
                             gossip for gossip in self.gossip_messages[npc_name]
                             if datetime.fromisoformat(gossip.timestamp) > cutoff_time
                         ]
-                
+
                 logger.debug("已清理过期消息")
-            
+
             except Exception as e:
                 logger.error(f"清理线程错误: {e}")
 
