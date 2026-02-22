@@ -55,9 +55,9 @@ MRAG_Enhanced_Model/
 ├── npc_storage/                # NPC 持久化数据
 ├── saves/                      # 游戏存档
 ├── tests/                      # 测试
-├── run.py                      # 启动入口
-├── requirements.txt
-└── start_demo.bat              # Windows 快速启动
+├── start.bat                   # Windows 一键启动（双击运行）
+├── start.ps1                   # PowerShell 启动脚本
+└── requirements.txt
 ```
 
 ---
@@ -137,20 +137,27 @@ POST /api/v1/events/trigger {type:"disaster", content:"教堂起火", location:"
 
 ## 快速启动
 
-```bash
-# 安装依赖
-pip install -r requirements.txt
-
-# 启动服务
-python run.py
-
-# 或 Windows 双击
-start_demo.bat
+**Windows 双击启动（推荐）：**
 ```
+start.bat
+```
+
+**PowerShell 启动：**
+```powershell
+powershell -ExecutionPolicy Bypass -File start.ps1
+```
+
+**手动启动：**
+```bash
+pip install -r requirements.txt
+python -m uvicorn backend.api_server:app --host 0.0.0.0 --port 8000 --reload
+```
+
+脚本会自动检查依赖、读取 `api_config.json` 中的 API Key，并在2秒后自动打开浏览器。
 
 服务启动后访问：`http://localhost:8000`
 
-API 文档：`http://localhost:8000/docs`
+API 文档（Swagger UI）：`http://localhost:8000/docs`
 
 ---
 
