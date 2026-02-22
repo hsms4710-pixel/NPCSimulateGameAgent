@@ -53,37 +53,46 @@ async def trigger_event(event_type: str, content: str, location: str = "",
         logger.info(f"事件已注册到推进系统: {event.id}")
 
     # 3. 空间广播（如果有 WorldEventManager）
+    # 从 world_data 动态查询地点坐标，不硬编码
     aware_npcs = []
     if _world_event_manager and location:
-        pos = (0, 0)  # 默认位置，实际应从地点配置读取
-        msg = _world_event_manager.broadcast_spatial_event(
-            source_npc="world",
-            event_content=content,
-            location=pos,
-            intensity=min(1.0, impact_score / 100.0),
-            range_meters=200.0
-        )
-        aware_npcs = msg.aware_npcs
+        try:
+            from backend.world_data import world_data_manager
+            loc_coords = world_data_manager.get_location_coords(location)
+        except Exception:
+            loc_coords = None
+        pos = loc_coords if loc_coords else (0.0, 0.0)
+        try:
+            msg = _world_event_manager.broadcast_spatial_event(
+                source_npc="world",
+                event_content=content,
+                location=pos,
+                intensity=min(1.0, impact_score / 100.0),
+                range_meters=200.0
+            )
+            aware_npcs = getattr(msg, 'aware_npcs', [])
+        except Exception as e:
+            logger.warning(f"空间广播失败: {e}")
 
     # 4. 将感知到的NPC写入事件
     if hasattr(event, 'aware_npcs'):
         event.aware_npcs.extend(aware_npcs)
 
-    # 5. EventCoordinator 分析并分配角色
+    # 5. EventCoordinator 分析并分配角色（使用正确方法名 coordinate_response）
     npc_directives = {}
     if _event_coordinator:
         try:
-            from core_types.event_types import EventAnalysis, EventPriority
-            analysis = EventAnalysis(
-                event_id=event.id,
+            analysis, responses = await _event_coordinator.coordinate_response(
                 event_content=content,
-                event_type=event_type,
-                event_location=location,
-                priority=EventPriority.HIGH if impact_score > 70 else EventPriority.MEDIUM,
-                affected_npcs=aware_npcs,
-                coordination_notes=f"impact={impact_score}"
+                event_location=location
             )
-            npc_directives = await _event_coordinator.coordinate_event(analysis)
+            # 将角色分配结果写入 npc_directives
+            for resp in responses:
+                npc_directives[resp.npc_name] = {
+                    "role": resp.role.value if hasattr(resp.role, 'value') else str(resp.role),
+                    "action": resp.action_taken,
+                    "priority": getattr(resp, 'priority', 5)
+                }
         except Exception as e:
             logger.warning(f"EventCoordinator 分析失败: {e}")
 

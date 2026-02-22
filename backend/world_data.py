@@ -738,6 +738,22 @@ class WorldDataManager:
 
     # ========== 数据导出 ==========
 
+    def get_location_coords(self, location_name: str) -> Optional[tuple]:
+        """返回地点的 (x, y) 坐标，用于空间广播；从预置网格或数据文件读取"""
+        # 默认地点网格坐标（单位：米，供空间广播使用）
+        _DEFAULT_COORDS = {
+            "村庄大门":  (0.0,    0.0),
+            "镇中心":    (100.0,  0.0),
+            "酒馆":      (100.0,  80.0),
+            "市场区":    (180.0,  0.0),
+            "铁匠铺":    (260.0,  0.0),
+            "教堂":      (100.0, -100.0),
+            "工坊区":    (260.0,  80.0),
+            "农田":      (180.0, -150.0),
+            "森林边缘":  (-80.0, -80.0),
+        }
+        return _DEFAULT_COORDS.get(location_name)
+
     def get_world_state(self) -> Dict[str, Any]:
         """获取完整的世界状态"""
         return {

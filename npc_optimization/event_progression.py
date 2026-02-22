@@ -566,11 +566,39 @@ class EventProgressionSystem:
         # 结算NPC任务（触发奖励分发）
         self._settle_npc_tasks(state)
 
+        # 写入三层记忆
+        self._record_to_memory(state)
+
         # 触发回调
         if self.on_event_resolved:
             self.on_event_resolved(event_id)
 
         logger.info(f"事件树结算完成: {event_id}")
+
+    def _record_to_memory(self, state: EventState) -> None:
+        """将已结算事件写入记忆层"""
+        try:
+            ev = state.event
+            summary = (
+                f"事件「{ev.content[:40]}」在{ev.location}发生，"
+                f"共{len(state.npcs_aware)}人知晓，{len(state.npcs_reacted)}人响应，"
+                f"最终结算。"
+            )
+            logger.info(f"事件记忆记录: {summary}")
+            # 尝试通过 MemoryLayerManager 写入
+            try:
+                from npc_optimization.memory_layers import MemoryLayerManager
+                if hasattr(MemoryLayerManager, 'record_world_event'):
+                    MemoryLayerManager.record_world_event(
+                        event_id=ev.id,
+                        content=summary,
+                        location=ev.location,
+                        participants=list(state.npcs_reacted)
+                    )
+            except ImportError:
+                pass
+        except Exception as e:
+            logger.warning(f"写入事件记忆失败（非阻塞）: {e}")
 
     def _settle_npc_tasks(self, state: EventState) -> None:
         """结算与该事件关联的NPC任务（发放奖励、更新关系）"""

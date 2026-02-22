@@ -63,6 +63,22 @@ class WorldSimulator {
             // 监听语言变更事件
             window.addEventListener('languageChanged', () => this.onLanguageChanged());
         }
+
+        // 接入 WebSocket - 将新消息类型分发到 handleWebSocketMessage
+        if (window.api) {
+            window.api.onWebSocket('message', (data) => this.handleWebSocketMessage(data));
+            // 同时覆盖已有的通用分发，确保 6 种新消息类型都能被处理
+            const _origHandle = window.api._handleWebSocketMessage.bind(window.api);
+            window.api._handleWebSocketMessage = (data) => {
+                _origHandle(data);
+                // 新增消息类型分发给 game.js
+                const newTypes = ['event_phase_change','npc_moved','gossip_spread',
+                                  'trade_completed','relationship_changed','task_completed'];
+                if (newTypes.includes(data.type)) {
+                    this.handleWebSocketMessage(data);
+                }
+            };
+        }
     }
 
     /**

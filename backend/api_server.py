@@ -72,23 +72,23 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("世界模拟器模块不可用")
 
-    # 注册新路由模块（D1）
-    try:
-        from backend.routes.player_routes import router as player_router
-        from backend.routes.event_routes import router as event_router
-        from backend.routes.npc_routes import router as npc_router
-        app.include_router(player_router)
-        app.include_router(event_router)
-        app.include_router(npc_router)
-        logger.info("新路由模块已注册: player/event/npc")
-    except Exception as e:
-        logger.warning(f"新路由注册失败（可忽略）: {e}")
-
-    # 初始化事件服务层
+    # 初始化事件服务层（注入真实依赖）
     try:
         from backend.services.event_service import init_event_services
-        init_event_services()
-        logger.info("事件服务层已初始化")
+        from npc_optimization.event_coordinator import EventCoordinator
+        from npc_optimization.event_progression import EventProgressionSystem
+        from npc_optimization.world_event_manager import WorldEventManager
+
+        _coordinator = EventCoordinator()
+        _progression = EventProgressionSystem()
+        _world_event_mgr = WorldEventManager()
+
+        init_event_services(
+            coordinator=_coordinator,
+            progression=_progression,
+            world_event_mgr=_world_event_mgr
+        )
+        logger.info("事件服务层已初始化（含协调器/推进系统/空间广播）")
     except Exception as e:
         logger.warning(f"事件服务层初始化失败（可忽略）: {e}")
 
@@ -104,6 +104,18 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan
 )
+
+# 路由模块注册（必须在 app 定义后、lifespan 外部注册，FastAPI 要求启动前完成）
+try:
+    from backend.routes.player_routes import router as player_router
+    from backend.routes.event_routes import router as event_router
+    from backend.routes.npc_routes import router as npc_router
+    app.include_router(player_router)
+    app.include_router(event_router)
+    app.include_router(npc_router)
+    logger.info("新路由模块已注册: player/event/npc")
+except Exception as e:
+    logger.warning(f"新路由注册失败（可忽略）: {e}")
 
 # CORS 配置
 app.add_middleware(

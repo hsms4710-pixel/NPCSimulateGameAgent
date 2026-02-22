@@ -473,12 +473,31 @@ class NPCEventsMixin:
 
         if should_create:
             try:
+                import uuid as _uuid
                 task_description = f"处理事件: {event['content'][:50]}"
                 task_id = self.persistence.create_task(
                     description=task_description,
                     task_type="event_response",
                     priority=min(100, event.get("impact_score", 50) + 20)
                 )
+
+                # 同步写入 UnifiedNPCState.active_tasks（数据绑定原则）
+                task_entry = {
+                    "id": task_id or str(_uuid.uuid4()),
+                    "desc": task_description,
+                    "type": "event_response",
+                    "parent_event_id": event.get("event_id", ""),
+                    "status": "active",
+                    "sub_tasks": [
+                        {"id": str(_uuid.uuid4()), "desc": "响应并处理事件", "status": "active"}
+                    ],
+                    "completion_conditions": {"event_phase": "resolved"},
+                    "rewards": {"affection_delta": {}, "gold": 0}
+                }
+                if hasattr(self, 'persistence') and hasattr(self.persistence, 'current_state'):
+                    state = self.persistence.current_state
+                    if hasattr(state, 'active_tasks'):
+                        state.active_tasks.append(task_entry)
 
                 # 如果这是紧急任务，立即设为当前任务
                 if event.get("impact_score", 0) > 80:
