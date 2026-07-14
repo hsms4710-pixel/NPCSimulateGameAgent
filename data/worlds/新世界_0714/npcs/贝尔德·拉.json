@@ -1,0 +1,85 @@
+{
+  "npc_id": "28956233",
+  "name": "贝尔德·拉",
+  "race": "精灵",
+  "profession": "牧师",
+  "age": 55,
+  "gender": "男性",
+  "personality_traits": [
+    "幽默",
+    "固执",
+    "热情",
+    "谨慎"
+  ],
+  "temperament": "melancholic",
+  "moral_alignment": "neutral",
+  "speech_style": "普通",
+  "background": "贝尔德·拉是新世界_0714的一名牧师，在中心广场工作。",
+  "default_location": "中心广场",
+  "relationships": {
+    "杰莉·克": {
+      "type": "同事",
+      "affection": 43,
+      "description": "贝尔德·拉和杰莉·克是同事"
+    },
+    "贝特·森": {
+      "type": "朋友",
+      "affection": 51,
+      "description": "贝尔德·拉和贝特·森是朋友"
+    }
+  },
+  "short_term_goals": [
+    "做好牧师的工作"
+  ],
+  "long_term_goals": [
+    "成为新世界_0714最好的牧师"
+  ],
+  "skills": {
+    "牧师": 69
+  },
+  "daily_schedule": {
+    "dawn": {
+      "activity": "起床",
+      "location": "中心广场",
+      "description": "起床准备"
+    },
+    "early_morning": {
+      "activity": "吃饭",
+      "location": "中心广场",
+      "description": "吃早餐"
+    },
+    "morning": {
+      "activity": "工作",
+      "location": "中心广场",
+      "description": "开始工作"
+    },
+    "noon": {
+      "activity": "吃饭",
+      "location": "中心广场",
+      "description": "午餐时间"
+    },
+    "afternoon": {
+      "activity": "工作",
+      "location": "中心广场",
+      "description": "继续工作"
+    },
+    "evening": {
+      "activity": "休息",
+      "location": "中心广场",
+      "description": "结束工作"
+    },
+    "night": {
+      "activity": "社交",
+      "location": "中心广场",
+      "description": "休闲时间"
+    },
+    "late_night": {
+      "activity": "睡觉",
+      "location": "中心广场",
+      "description": "休息"
+    }
+  },
+  "initial_memories": [
+    "在新世界_0714生活多年"
+  ]
+}

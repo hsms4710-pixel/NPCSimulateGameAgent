@@ -421,7 +421,7 @@ class FAISSVectorStore:
         else:
             # 降级：简单分割
             import re
-            segments = re.split(r'[，。！？、；：""''（）【】\[\]\s]+', text)
+            segments = re.split('][，。！？、；：""''（）【[\\s]+', text)
             keywords = []
             for seg in segments:
                 seg = seg.strip()

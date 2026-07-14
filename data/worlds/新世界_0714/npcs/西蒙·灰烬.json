@@ -1,0 +1,90 @@
+{
+  "npc_id": "d0a65506",
+  "name": "西蒙·灰烬",
+  "race": "人类",
+  "profession": "商人",
+  "age": 49,
+  "gender": "女性",
+  "personality_traits": [
+    "勤劳",
+    "幽默",
+    "好奇",
+    "固执"
+  ],
+  "temperament": "choleric",
+  "moral_alignment": "neutral",
+  "speech_style": "普通",
+  "background": "西蒙·灰烬是新世界_0714的一名商人，在中心广场工作。",
+  "default_location": "中心广场",
+  "relationships": {
+    "艾琳·霜花": {
+      "type": "朋友",
+      "affection": 68,
+      "description": "西蒙·灰烬和艾琳·霜花是朋友"
+    },
+    "塞维勒斯·暗泉": {
+      "type": "邻居",
+      "affection": 52,
+      "description": "西蒙·灰烬和塞维勒斯·暗泉是邻居"
+    },
+    "雷纳德·锋刃": {
+      "type": "邻居",
+      "affection": 71,
+      "description": "西蒙·灰烬和雷纳德·锋刃是邻居"
+    }
+  },
+  "short_term_goals": [
+    "做好商人的工作"
+  ],
+  "long_term_goals": [
+    "成为新世界_0714最好的商人"
+  ],
+  "skills": {
+    "商人": 86
+  },
+  "daily_schedule": {
+    "dawn": {
+      "activity": "起床",
+      "location": "中心广场",
+      "description": "起床准备"
+    },
+    "early_morning": {
+      "activity": "吃饭",
+      "location": "中心广场",
+      "description": "吃早餐"
+    },
+    "morning": {
+      "activity": "工作",
+      "location": "中心广场",
+      "description": "开始工作"
+    },
+    "noon": {
+      "activity": "吃饭",
+      "location": "中心广场",
+      "description": "午餐时间"
+    },
+    "afternoon": {
+      "activity": "工作",
+      "location": "中心广场",
+      "description": "继续工作"
+    },
+    "evening": {
+      "activity": "休息",
+      "location": "中心广场",
+      "description": "结束工作"
+    },
+    "night": {
+      "activity": "社交",
+      "location": "中心广场",
+      "description": "休闲时间"
+    },
+    "late_night": {
+      "activity": "睡觉",
+      "location": "中心广场",
+      "description": "休息"
+    }
+  },
+  "initial_memories": [
+    "在新世界_0714生活多年"
+  ]
+}

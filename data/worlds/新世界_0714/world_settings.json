@@ -1,0 +1,137 @@
+{
+  "world_id": "e86a5864",
+  "world_name": "新世界_0714",
+  "world_description": "传统中世纪小镇",
+  "theme": "medieval_fantasy",
+  "created_at": "2026-07-14T15:06:12.209567",
+  "races": {
+    "人类": {
+      "name": "人类",
+      "traits": [
+        "普通"
+      ]
+    },
+    "精灵": {
+      "name": "精灵",
+      "traits": [
+        "普通"
+      ]
+    },
+    "矮人": {
+      "name": "矮人",
+      "traits": [
+        "普通"
+      ]
+    },
+    "半身人": {
+      "name": "半身人",
+      "traits": [
+        "普通"
+      ]
+    }
+  },
+  "professions": {
+    "铁匠": {
+      "name": "铁匠",
+      "workplace": "未指定",
+      "work_hours": "8:00-18:00",
+      "skills": [],
+      "social_status": "普通"
+    },
+    "酒馆老板": {
+      "name": "酒馆老板",
+      "workplace": "未指定",
+      "work_hours": "8:00-18:00",
+      "skills": [],
+      "social_status": "普通"
+    },
+    "牧师": {
+      "name": "牧师",
+      "workplace": "未指定",
+      "work_hours": "8:00-18:00",
+      "skills": [],
+      "social_status": "普通"
+    },
+    "农夫": {
+      "name": "农夫",
+      "workplace": "未指定",
+      "work_hours": "8:00-18:00",
+      "skills": [],
+      "social_status": "普通"
+    },
+    "商人": {
+      "name": "商人",
+      "workplace": "未指定",
+      "work_hours": "8:00-18:00",
+      "skills": [],
+      "social_status": "普通"
+    },
+    "猎人": {
+      "name": "猎人",
+      "workplace": "未指定",
+      "work_hours": "8:00-18:00",
+      "skills": [],
+      "social_status": "普通"
+    },
+    "法师": {
+      "name": "法师",
+      "workplace": "未指定",
+      "work_hours": "8:00-18:00",
+      "skills": [],
+      "social_status": "普通"
+    },
+    "骑士": {
+      "name": "骑士",
+      "workplace": "未指定",
+      "work_hours": "8:00-18:00",
+      "skills": [],
+      "social_status": "普通"
+    }
+  },
+  "time_system": {
+    "hours_per_day": 24,
+    "time_periods": {
+      "dawn": {
+        "start": 5,
+        "end": 6,
+        "description": "黎明"
+      },
+      "early_morning": {
+        "start": 6,
+        "end": 8,
+        "description": "清晨"
+      },
+      "morning": {
+        "start": 8,
+        "end": 12,
+        "description": "上午"
+      },
+      "noon": {
+        "start": 12,
+        "end": 14,
+        "description": "中午"
+      },
+      "afternoon": {
+        "start": 14,
+        "end": 18,
+        "description": "下午"
+      },
+      "evening": {
+        "start": 18,
+        "end": 20,
+        "description": "傍晚"
+      },
+      "night": {
+        "start": 20,
+        "end": 23,
+        "description": "夜晚"
+      },
+      "late_night": {
+        "start": 23,
+        "end": 5,
+        "description": "深夜"
+      }
+    }
+  },
+  "rules": {}
+}

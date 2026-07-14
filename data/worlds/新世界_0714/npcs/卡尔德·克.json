@@ -1,0 +1,90 @@
+{
+  "npc_id": "d9c8f63f",
+  "name": "卡尔德·克",
+  "race": "矮人",
+  "profession": "农夫",
+  "age": 33,
+  "gender": "女性",
+  "personality_traits": [
+    "善良",
+    "聪明",
+    "勤劳",
+    "热情"
+  ],
+  "temperament": "choleric",
+  "moral_alignment": "neutral",
+  "speech_style": "普通",
+  "background": "卡尔德·克是新世界_0714的一名农夫，在中心广场工作。",
+  "default_location": "中心广场",
+  "relationships": {
+    "杰莉·克": {
+      "type": "朋友",
+      "affection": 73,
+      "description": "卡尔德·克和杰莉·克是朋友"
+    },
+    "贝尔德·拉": {
+      "type": "邻居",
+      "affection": 57,
+      "description": "卡尔德·克和贝尔德·拉是邻居"
+    },
+    "贝特·森": {
+      "type": "朋友",
+      "affection": 47,
+      "description": "卡尔德·克和贝特·森是朋友"
+    }
+  },
+  "short_term_goals": [
+    "做好农夫的工作"
+  ],
+  "long_term_goals": [
+    "成为新世界_0714最好的农夫"
+  ],
+  "skills": {
+    "农夫": 88
+  },
+  "daily_schedule": {
+    "dawn": {
+      "activity": "起床",
+      "location": "中心广场",
+      "description": "起床准备"
+    },
+    "early_morning": {
+      "activity": "吃饭",
+      "location": "中心广场",
+      "description": "吃早餐"
+    },
+    "morning": {
+      "activity": "工作",
+      "location": "中心广场",
+      "description": "开始工作"
+    },
+    "noon": {
+      "activity": "吃饭",
+      "location": "中心广场",
+      "description": "午餐时间"
+    },
+    "afternoon": {
+      "activity": "工作",
+      "location": "中心广场",
+      "description": "继续工作"
+    },
+    "evening": {
+      "activity": "休息",
+      "location": "中心广场",
+      "description": "结束工作"
+    },
+    "night": {
+      "activity": "社交",
+      "location": "中心广场",
+      "description": "休闲时间"
+    },
+    "late_night": {
+      "activity": "睡觉",
+      "location": "中心广场",
+      "description": "休息"
+    }
+  },
+  "initial_memories": [
+    "在新世界_0714生活多年"
+  ]
+}

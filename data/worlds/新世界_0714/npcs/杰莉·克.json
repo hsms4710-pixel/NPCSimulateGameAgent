@@ -1,0 +1,80 @@
+{
+  "npc_id": "41cbd0ba",
+  "name": "杰莉·克",
+  "race": "人类",
+  "profession": "商人",
+  "age": 30,
+  "gender": "男性",
+  "personality_traits": [
+    "聪明",
+    "谨慎",
+    "勤劳",
+    "严肃"
+  ],
+  "temperament": "choleric",
+  "moral_alignment": "neutral",
+  "speech_style": "普通",
+  "background": "杰莉·克是新世界_0714的一名商人，在中心广场工作。",
+  "default_location": "中心广场",
+  "relationships": {
+    "贝特·森": {
+      "type": "熟人",
+      "affection": 62,
+      "description": "杰莉·克和贝特·森是熟人"
+    }
+  },
+  "short_term_goals": [
+    "做好商人的工作"
+  ],
+  "long_term_goals": [
+    "成为新世界_0714最好的商人"
+  ],
+  "skills": {
+    "商人": 78
+  },
+  "daily_schedule": {
+    "dawn": {
+      "activity": "起床",
+      "location": "中心广场",
+      "description": "起床准备"
+    },
+    "early_morning": {
+      "activity": "吃饭",
+      "location": "中心广场",
+      "description": "吃早餐"
+    },
+    "morning": {
+      "activity": "工作",
+      "location": "中心广场",
+      "description": "开始工作"
+    },
+    "noon": {
+      "activity": "吃饭",
+      "location": "中心广场",
+      "description": "午餐时间"
+    },
+    "afternoon": {
+      "activity": "工作",
+      "location": "中心广场",
+      "description": "继续工作"
+    },
+    "evening": {
+      "activity": "休息",
+      "location": "中心广场",
+      "description": "结束工作"
+    },
+    "night": {
+      "activity": "社交",
+      "location": "中心广场",
+      "description": "休闲时间"
+    },
+    "late_night": {
+      "activity": "睡觉",
+      "location": "中心广场",
+      "description": "休息"
+    }
+  },
+  "initial_memories": [
+    "在新世界_0714生活多年"
+  ]
+}

@@ -1,0 +1,80 @@
+{
+  "npc_id": "49a69c86",
+  "name": "艾琳·霜花",
+  "race": "精灵",
+  "profession": "农夫",
+  "age": 59,
+  "gender": "女性",
+  "personality_traits": [
+    "冷静",
+    "幽默",
+    "好奇",
+    "勤劳"
+  ],
+  "temperament": "melancholic",
+  "moral_alignment": "neutral",
+  "speech_style": "普通",
+  "background": "艾琳·霜花是新世界_0714的一名农夫，在中心广场工作。",
+  "default_location": "中心广场",
+  "relationships": {
+    "西蒙·灰烬": {
+      "type": "邻居",
+      "affection": 80,
+      "description": "艾琳·霜花和西蒙·灰烬是邻居"
+    }
+  },
+  "short_term_goals": [
+    "做好农夫的工作"
+  ],
+  "long_term_goals": [
+    "成为新世界_0714最好的农夫"
+  ],
+  "skills": {
+    "农夫": 88
+  },
+  "daily_schedule": {
+    "dawn": {
+      "activity": "起床",
+      "location": "中心广场",
+      "description": "起床准备"
+    },
+    "early_morning": {
+      "activity": "吃饭",
+      "location": "中心广场",
+      "description": "吃早餐"
+    },
+    "morning": {
+      "activity": "工作",
+      "location": "中心广场",
+      "description": "开始工作"
+    },
+    "noon": {
+      "activity": "吃饭",
+      "location": "中心广场",
+      "description": "午餐时间"
+    },
+    "afternoon": {
+      "activity": "工作",
+      "location": "中心广场",
+      "description": "继续工作"
+    },
+    "evening": {
+      "activity": "休息",
+      "location": "中心广场",
+      "description": "结束工作"
+    },
+    "night": {
+      "activity": "社交",
+      "location": "中心广场",
+      "description": "休闲时间"
+    },
+    "late_night": {
+      "activity": "睡觉",
+      "location": "中心广场",
+      "description": "休息"
+    }
+  },
+  "initial_memories": [
+    "在新世界_0714生活多年"
+  ]
+}

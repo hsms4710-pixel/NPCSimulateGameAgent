@@ -643,20 +643,27 @@ class WorldGenerator:
 
     def _generate_unique_name(self, theme: str, existing: set) -> str:
         """生成唯一名字"""
-        # 根据主题选择名字风格
         if theme == "eastern_martial":
             surnames = ["李", "王", "张", "刘", "陈", "杨", "赵", "黄", "周", "吴"]
             given_names = ["明", "华", "强", "伟", "芳", "娟", "秀", "英", "志", "文"]
+            for _ in range(100):
+                name = random.choice(surnames) + random.choice(given_names)
+                if name not in existing:
+                    return name
         else:
-            surnames = ["艾", "贝", "卡", "德", "埃", "弗", "格", "海", "伊", "杰"]
-            given_names = ["尔德", "拉", "克", "斯", "娜", "莉", "恩", "特", "森", "伦"]
-
-        for _ in range(100):
-            name = random.choice(surnames) + random.choice(given_names)
-            if theme != "eastern_martial":
-                name = random.choice(surnames) + random.choice(given_names) + "·" + random.choice(given_names)
-            if name not in existing:
-                return name
+            western_names = [
+                "格雷戈尔·风锤", "莉莉安·花语", "马库斯·晨星", "伊莎贝拉·月华",
+                "加文·焰心", "塞维勒斯·暗泉", "罗莎琳德·银叶", "埃德温·钢盾",
+                "薇拉·星织", "康纳德·岩心", "奥菲莉亚·雾歌", "雷纳德·锋刃",
+                "西尔维娅·晨露", "巴尔德·铁壁", "艾琳·霜花", "德里克·橡木",
+                "海伦娜·琉璃", "奥古斯特·烈焰", "卡特琳娜·夜莺", "西蒙·灰烬",
+                "维多利亚·金穗", "芬里斯·狼心", "艾米莉亚·春水", "雷克斯·铁拳",
+                "索菲亚·冰晶", "尼古拉斯·暗刃", "伊娃·绿茵", "亚瑟·王冠",
+            ]
+            for _ in range(100):
+                name = random.choice(western_names)
+                if name not in existing:
+                    return name
 
         return f"无名者_{uuid.uuid4().hex[:4]}"
 

@@ -13,6 +13,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
+from backend.schemas import (
+    APIConfig, EventRequest, DialogueRequest, NPCSelectRequest,
+    PlayerCreateRequest, PlayerActionRequest, WorldEventRequest, TimeAdvanceRequest
+)
 from datetime import datetime
 import asyncio
 import json
@@ -147,66 +151,6 @@ else:
     logger.warning(f"前端目录不存在: {FRONTEND_DIR}")
 
 
-# ========== Pydantic 模型 ==========
-
-class APIConfig(BaseModel):
-    provider: Optional[str] = "deepseek"
-    api_key: Optional[str] = None
-    api_base: Optional[str] = "https://api.deepseek.com/v1"
-    model: Optional[str] = "deepseek-chat"
-
-
-class EventRequest(BaseModel):
-    content: str
-    event_type: str = "dialogue"
-
-
-class DialogueRequest(BaseModel):
-    message: str
-
-
-class NPCSelectRequest(BaseModel):
-    npc_name: str
-
-
-# ========== 世界模拟器模型 ==========
-
-class PlayerCreateRequest(BaseModel):
-    """玩家创建请求"""
-    preset_id: Optional[str] = None  # 预设ID
-    name: str
-    age: int = 25
-    gender: str = "男"
-    birthplace: str = "远方"
-    appearance: str = ""
-    # 自定义模式的额外字段
-    profession: Optional[str] = None
-    background: Optional[str] = None
-    personality: Optional[str] = None
-    skills: Optional[Dict[str, int]] = None
-
-
-class PlayerActionRequest(BaseModel):
-    """玩家行动请求"""
-    action: str  # 社交/饮食/工作/休息/移动
-    target: Optional[str] = None  # 目标NPC或地点
-    details: Optional[str] = None  # 额外详情（如对话内容）
-
-
-class WorldEventRequest(BaseModel):
-    """世界事件请求"""
-    title: str
-    description: str
-    location: str
-    event_type: str = "自定义"
-    severity: int = 3  # 1-5
-
-
-class TimeAdvanceRequest(BaseModel):
-    hours: float = 1.0
-    update_npcs: bool = True  # 是否同时更新NPC状态
-
-
 # ========== WebSocket 连接管理 ==========
 
 class ConnectionManager:
@@ -292,6 +236,17 @@ async def get_system_status():
         "npc_initialized": npc_service.is_initialized() if npc_service else False,
         "current_npc": npc_service.get_current_npc_name() if npc_service else None,
         "server_time": datetime.now().isoformat()
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """健康检查端点"""
+    return {
+        "status": "healthy",
+        "service": "npc-simulator",
+        "npc_initialized": npc_service.is_initialized() if npc_service else False,
+        "timestamp": datetime.now().isoformat()
     }
 
 
@@ -616,7 +571,7 @@ async def get_world_locations():
     if not world_manager:
         raise HTTPException(status_code=503, detail="世界模拟器未初始化")
 
-    return {"locations": WORLD_LOCATIONS}
+    return {"locations": world_manager.locations}
 
 
 @app.get("/api/v1/player/presets")

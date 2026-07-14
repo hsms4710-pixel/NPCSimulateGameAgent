@@ -197,7 +197,11 @@ class WorldManager:
         self.npcs: Dict[str, Any] = {}  # NPC系统实例
         self.world_time = WorldTime()
         self.event_trigger = WorldEventTrigger()
-        self.locations = WORLD_LOCATIONS.copy()
+        try:
+            from data import get_data_loader
+            self.locations = get_data_loader().get_world_locations()
+        except Exception:
+            self.locations = WORLD_LOCATIONS.copy()
 
         # 交互日志
         self.interaction_logs: List[InteractionLog] = []

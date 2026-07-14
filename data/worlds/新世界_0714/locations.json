@@ -1,0 +1,115 @@
+{
+  "locations": {
+    "中心广场": {
+      "location_id": "d1b0aa22",
+      "name": "中心广场",
+      "location_type": "public",
+      "description": "人们聚集和交流的中心地带",
+      "owner": null,
+      "connected_to": [
+        "酒馆",
+        "铁匠铺",
+        "教堂",
+        "市场",
+        "城堡",
+        "森林"
+      ],
+      "activities_available": [
+        "社交",
+        "观察",
+        "休息"
+      ],
+      "metadata": {}
+    },
+    "酒馆": {
+      "location_id": "cbcda413",
+      "name": "酒馆",
+      "location_type": "social",
+      "description": "新世界_0714的酒馆",
+      "owner": null,
+      "connected_to": [
+        "中心广场"
+      ],
+      "activities_available": [
+        "休息",
+        "社交"
+      ],
+      "metadata": {}
+    },
+    "铁匠铺": {
+      "location_id": "a17dad09",
+      "name": "铁匠铺",
+      "location_type": "workplace",
+      "description": "新世界_0714的铁匠铺",
+      "owner": null,
+      "connected_to": [
+        "中心广场"
+      ],
+      "activities_available": [
+        "工作",
+        "交谈"
+      ],
+      "metadata": {}
+    },
+    "教堂": {
+      "location_id": "260ac83b",
+      "name": "教堂",
+      "location_type": "religious",
+      "description": "新世界_0714的教堂",
+      "owner": null,
+      "connected_to": [
+        "中心广场"
+      ],
+      "activities_available": [
+        "休息",
+        "社交"
+      ],
+      "metadata": {}
+    },
+    "市场": {
+      "location_id": "767af33c",
+      "name": "市场",
+      "location_type": "commercial",
+      "description": "新世界_0714的市场",
+      "owner": null,
+      "connected_to": [
+        "中心广场"
+      ],
+      "activities_available": [
+        "休息",
+        "社交"
+      ],
+      "metadata": {}
+    },
+    "城堡": {
+      "location_id": "ff6d9b01",
+      "name": "城堡",
+      "location_type": "public",
+      "description": "新世界_0714的城堡",
+      "owner": null,
+      "connected_to": [
+        "中心广场"
+      ],
+      "activities_available": [
+        "休息",
+        "社交"
+      ],
+      "metadata": {}
+    },
+    "森林": {
+      "location_id": "76166d44",
+      "name": "森林",
+      "location_type": "wilderness",
+      "description": "新世界_0714的森林",
+      "owner": null,
+      "connected_to": [
+        "中心广场"
+      ],
+      "activities_available": [
+        "休息",
+        "社交"
+      ],
+      "metadata": {}
+    }
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "npc_id": "067cda7f",
+  "name": "雷纳德·锋刃",
+  "race": "矮人",
+  "profession": "牧师",
+  "age": 57,
+  "gender": "男性",
+  "personality_traits": [
+    "热情",
+    "谨慎",
+    "冷静",
+    "固执"
+  ],
+  "temperament": "melancholic",
+  "moral_alignment": "neutral",
+  "speech_style": "普通",
+  "background": "雷纳德·锋刃是新世界_0714的一名牧师，在中心广场工作。",
+  "default_location": "中心广场",
+  "relationships": {
+    "西蒙·灰烬": {
+      "type": "老友",
+      "affection": 59,
+      "description": "雷纳德·锋刃和西蒙·灰烬是老友"
+    },
+    "艾琳·霜花": {
+      "type": "邻居",
+      "affection": 75,
+      "description": "雷纳德·锋刃和艾琳·霜花是邻居"
+    },
+    "塞维勒斯·暗泉": {
+      "type": "同事",
+      "affection": 77,
+      "description": "雷纳德·锋刃和塞维勒斯·暗泉是同事"
+    }
+  },
+  "short_term_goals": [
+    "做好牧师的工作"
+  ],
+  "long_term_goals": [
+    "成为新世界_0714最好的牧师"
+  ],
+  "skills": {
+    "牧师": 73
+  },
+  "daily_schedule": {
+    "dawn": {
+      "activity": "起床",
+      "location": "中心广场",
+      "description": "起床准备"
+    },
+    "early_morning": {
+      "activity": "吃饭",
+      "location": "中心广场",
+      "description": "吃早餐"
+    },
+    "morning": {
+      "activity": "工作",
+      "location": "中心广场",
+      "description": "开始工作"
+    },
+    "noon": {
+      "activity": "吃饭",
+      "location": "中心广场",
+      "description": "午餐时间"
+    },
+    "afternoon": {
+      "activity": "工作",
+      "location": "中心广场",
+      "description": "继续工作"
+    },
+    "evening": {
+      "activity": "休息",
+      "location": "中心广场",
+      "description": "结束工作"
+    },
+    "night": {
+      "activity": "社交",
+      "location": "中心广场",
+      "description": "休闲时间"
+    },
+    "late_night": {
+      "activity": "睡觉",
+      "location": "中心广场",
+      "description": "休息"
+    }
+  },
+  "initial_memories": [
+    "在新世界_0714生活多年"
+  ]
+}
